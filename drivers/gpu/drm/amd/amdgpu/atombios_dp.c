@@ -190,7 +190,10 @@ void amdgpu_atombios_dp_aux_init(struct amdgpu_connector *amdgpu_connector)
 
 	amdgpu_connector->ddc_bus->rec.hpd = amdgpu_connector->hpd.hpd;
 	amdgpu_connector->ddc_bus->aux.dev = amdgpu_connector->base.kdev;
-	amdgpu_connector->ddc_bus->aux.transfer = amdgpu_atombios_dp_aux_transfer;
+	if (amdgpu_auxch)
+		amdgpu_connector->ddc_bus->aux.transfer = amdgpu_native_dp_aux_transfer;
+	else
+		amdgpu_connector->ddc_bus->aux.transfer = amdgpu_atombios_dp_aux_transfer;
 	ret = drm_dp_aux_register(&amdgpu_connector->ddc_bus->aux);
 	if (!ret)
 		amdgpu_connector->ddc_bus->has_aux = true;
