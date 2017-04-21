@@ -76,8 +76,8 @@
 
 /****************/
 
+/*			    AUX_SW_RX_HPD_DISCON |	     \ */
 #define AUX_RX_ERROR_FLAGS (AUX_SW_RX_OVERFLOW |	     \
-			    AUX_SW_RX_HPD_DISCON |	     \
 			    AUX_SW_RX_PARTIAL_BYTE |	     \
 			    AUX_SW_NON_AUX_MODE |	     \
 			    AUX_SW_RX_SYNC_INVALID_L |	     \
