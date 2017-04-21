@@ -24,6 +24,9 @@
 #ifndef __ATOMBIOS_DP_H__
 #define __ATOMBIOS_DP_H__
 
+ssize_t
+amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg);
+
 void amdgpu_atombios_dp_aux_init(struct amdgpu_connector *amdgpu_connector);
 u8 amdgpu_atombios_dp_get_sinktype(struct amdgpu_connector *amdgpu_connector);
 int amdgpu_atombios_dp_get_dpcd(struct amdgpu_connector *amdgpu_connector);
