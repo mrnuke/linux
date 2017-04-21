@@ -64,6 +64,7 @@
 #define KMS_DRIVER_MINOR	9
 #define KMS_DRIVER_PATCHLEVEL	0
 
+int amdgpu_auxch = -1;
 int amdgpu_vram_limit = 0;
 int amdgpu_gart_size = -1; /* auto */
 int amdgpu_moverate = -1; /* auto */
@@ -209,6 +210,9 @@ module_param_named(disable_cu, amdgpu_disable_cu, charp, 0444);
 MODULE_PARM_DESC(virtual_display,
 		 "Enable virtual display feature (the virtual_display will be set like xxxx:xx:xx.x,x;xxxx:xx:xx.x,x)");
 module_param_named(virtual_display, amdgpu_virtual_display, charp, 0444);
+
+MODULE_PARM_DESC(auxch, "Use native auxch experimental support (1 = enable, 0 = disable, -1 = auto)");
+module_param_named(auxch, amdgpu_auxch, int, 0444);
 
 static const struct pci_device_id pciidlist[] = {
 #ifdef  CONFIG_DRM_AMDGPU_SI

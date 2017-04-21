@@ -66,6 +66,7 @@
 /*
  * Modules parameters.
  */
+extern int amdgpu_auxch;
 extern int amdgpu_modeset;
 extern int amdgpu_vram_limit;
 extern int amdgpu_gart_size;
