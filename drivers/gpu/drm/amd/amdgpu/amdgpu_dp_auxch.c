@@ -27,8 +27,9 @@
 #include <drm/amdgpu_drm.h>
 #include "amdgpu.h"
 
+#define AUX_CH_BASE					0x5c00
 /* extracted from: 'drivers/gpu/drm/radeon/nid.h' */
-#define AUX_CONTROL					0x6200
+#define AUX_CONTROL					(AUX_CH_BASE + 0x00)
 #define 	AUX_EN					(1 << 0)
 #define 	AUX_LS_READ_EN				(1 << 8)
 #define 	AUX_LS_UPDATE_DISABLE(x)		(((x) & 0x1) << 12)
@@ -38,19 +39,19 @@
 #define 	AUX_IMPCAL_REQ_EN			(1 << 24)
 #define 	AUX_TEST_MODE				(1 << 28)
 #define 	AUX_DEGLITCH_EN				(1 << 29)
-#define AUX_SW_CONTROL					0x6204
+#define AUX_SW_CONTROL					(AUX_CH_BASE + 0x01)
 #define 	AUX_SW_GO				(1 << 0)
 #define 	AUX_LS_READ_TRIG			(1 << 2)
 #define 	AUX_SW_START_DELAY(x)			(((x) & 0xf) << 4)
 #define 	AUX_SW_WR_BYTES(x)			(((x) & 0x1f) << 16)
 
-#define AUX_SW_INTERRUPT_CONTROL			0x620c
+#define AUX_SW_INTERRUPT_CONTROL			(AUX_CH_BASE + 0x03)
 #define 	AUX_SW_DONE_INT				(1 << 0)
 #define 	AUX_SW_DONE_ACK				(1 << 1)
 #define 	AUX_SW_DONE_MASK			(1 << 2)
 #define 	AUX_SW_LS_DONE_INT			(1 << 4)
 #define 	AUX_SW_LS_DONE_MASK			(1 << 6)
-#define AUX_SW_STATUS					0x6210
+#define AUX_SW_STATUS					(AUX_CH_BASE + 0x4)
 #define 	AUX_SW_DONE				(1 << 0)
 #define 	AUX_SW_REQ				(1 << 1)
 #define 	AUX_SW_RX_TIMEOUT_STATE(x)		(((x) & 0x7) << 4)
@@ -68,7 +69,7 @@
 #define 	AUX_SW_RX_RECV_INVALID_H		(1 << 22)
 #define 	AUX_SW_RX_RECV_INVALID_V		(1 << 23)
 
-#define AUX_SW_DATA					0x6218
+#define AUX_SW_DATA					(AUX_CH_BASE + 0x06)
 #define AUX_SW_DATA_RW					(1 << 0)
 #define AUX_SW_DATA_MASK(x)				(((x) & 0xff) << 8)
 #define AUX_SW_DATA_INDEX(x)				(((x) & 0x1f) << 16)
@@ -91,19 +92,9 @@
 
 #define BARE_ADDRESS_SIZE 3
 
-/*
- * This tells us the offset of each AUX control block from the first block.
- * It is given in number of 32-bit registers, so it needs to be multiplied by
- * 4 before converting it to an address offset.
- */
-static const u32 aux_offset[] =
+static const uint32_t aux_offset[] =
 {
-	0x6200 - 0x6200,
-	0x6250 - 0x6200,
-	0x62a0 - 0x6200,
-	0x6300 - 0x6200,
-	0x6350 - 0x6200,
-	0x63a0 - 0x6200,
+	0x00, 0x1c, 0x38, 0x54, 0x70, 0x8c,
 };
 
 ssize_t
