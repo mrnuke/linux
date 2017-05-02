@@ -119,6 +119,7 @@ static int aux_do_transfer(struct amdgpu_device *adev, uint32_t block, size_t by
 {
 	uint32_t status;
 	int retry_count = 0;
+	const int max_retry_count = 1000;
 
 	/* clear the ACK */
 	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + block, AUX_SW_DONE_ACK, false);
@@ -134,9 +135,9 @@ static int aux_do_transfer(struct amdgpu_device *adev, uint32_t block, size_t by
 			break;
 
 		usleep_range(100, 200);
-	} while (retry_count++ < 1000);
+	} while (retry_count++ < max_retry_count);
 
-	if (retry_count >= 1000) {
+	if (retry_count >= max_retry_count) {
 		DRM_ERROR("auxch hw never signalled completion, flags %08x\n",
 			  status);
 		return -EIO;
