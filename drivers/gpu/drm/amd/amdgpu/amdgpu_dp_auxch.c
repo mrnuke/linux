@@ -142,61 +142,61 @@ amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg
 	mutex_lock(&chan->mutex);
 
 	/* switch the pad to aux mode */
-	tmp = RREG32(chan->rec.mask_clk_reg);
+	tmp = amdgpu_mm_rreg(adev, chan->rec.mask_clk_reg, false);
 	tmp |= (1 << 16);
-	WREG32(chan->rec.mask_clk_reg, tmp);
+	amdgpu_mm_wreg(adev, chan->rec.mask_clk_reg, tmp, false);
 
 	/* setup AUX control register with correct HPD pin */
-	tmp = RREG32(AUX_CONTROL + aux_offset[instance]);
+	tmp = amdgpu_mm_rreg(adev, AUX_CONTROL + aux_offset[instance], false);
 
 	tmp &= AUX_HPD_SEL(0x7);
 	tmp |= AUX_HPD_SEL(chan->rec.hpd);
 	tmp |= AUX_EN | AUX_LS_READ_EN;
 
-	WREG32(AUX_CONTROL + aux_offset[instance], tmp);
+	amdgpu_mm_wreg(adev, AUX_CONTROL + aux_offset[instance], tmp, false);
 
 	/* atombios appears to write this twice lets copy it */
-	WREG32(AUX_SW_CONTROL + aux_offset[instance],
-	       AUX_SW_WR_BYTES(bytes));
-	WREG32(AUX_SW_CONTROL + aux_offset[instance],
-	       AUX_SW_WR_BYTES(bytes));
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
+	       AUX_SW_WR_BYTES(bytes), false);
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
+	       AUX_SW_WR_BYTES(bytes), false);
 
 	/* write the data header into the registers */
 	/* request, address, msg size */
 	byte = (msg->request << 4) | ((msg->address >> 16) & 0xf);
-	WREG32(AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte) | AUX_SW_AUTOINCREMENT_DISABLE);
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+	       AUX_SW_DATA_MASK(byte) | AUX_SW_AUTOINCREMENT_DISABLE, false);
 
 	byte = (msg->address >> 8) & 0xff;
-	WREG32(AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte));
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+	       AUX_SW_DATA_MASK(byte), false);
 
 	byte = msg->address & 0xff;
-	WREG32(AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte));
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+	       AUX_SW_DATA_MASK(byte), false);
 
 	byte = msize;
-	WREG32(AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte));
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+	       AUX_SW_DATA_MASK(byte), false);
 
 	/* if we are writing - write the msg buffer */
 	if (is_write) {
 		for (i = 0; i < msg->size; i++) {
-			WREG32(AUX_SW_DATA + aux_offset[instance],
-			       AUX_SW_DATA_MASK(buf[i]));
+			amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+			       AUX_SW_DATA_MASK(buf[i]), false);
 		}
 	}
 
 	/* clear the ACK */
-	WREG32(AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK);
+	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK, false);
 
 	/* write the size and GO bits */
-	WREG32(AUX_SW_CONTROL + aux_offset[instance],
-	       AUX_SW_WR_BYTES(bytes) | AUX_SW_GO);
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
+	       AUX_SW_WR_BYTES(bytes) | AUX_SW_GO, false);
 
 	/* poll the status registers - TODO irq support */
 	do {
-		tmp = RREG32(AUX_SW_STATUS + aux_offset[instance]);
+		tmp = amdgpu_mm_rreg(adev, AUX_SW_STATUS + aux_offset[instance], false);
 		if (tmp & AUX_SW_DONE) {
 			break;
 		}
@@ -221,14 +221,14 @@ amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg
 
 	bytes = AUX_SW_REPLY_GET_BYTE_COUNT(tmp);
 	if (bytes) {
-		WREG32(AUX_SW_DATA + aux_offset[instance],
-		       AUX_SW_DATA_RW | AUX_SW_AUTOINCREMENT_DISABLE);
+		amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+		       AUX_SW_DATA_RW | AUX_SW_AUTOINCREMENT_DISABLE, false);
 
-		tmp = RREG32(AUX_SW_DATA + aux_offset[instance]);
+		tmp = amdgpu_mm_rreg(adev, AUX_SW_DATA + aux_offset[instance], false);
 		ack = (tmp >> 8) & 0xff;
 
 		for (i = 0; i < bytes - 1; i++) {
-			tmp = RREG32(AUX_SW_DATA + aux_offset[instance]);
+			tmp = amdgpu_mm_rreg(adev, AUX_SW_DATA + aux_offset[instance], false);
 			if (buf)
 				buf[i] = (tmp >> 8) & 0xff;
 		}
@@ -236,7 +236,7 @@ amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg
 			ret = bytes - 1;
 	}
 
-	WREG32(AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK);
+	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK, false);
 
 	if (is_write)
 		ret = msg->size;
