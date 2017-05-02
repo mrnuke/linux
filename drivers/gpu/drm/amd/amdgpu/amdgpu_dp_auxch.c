@@ -97,6 +97,62 @@ static const uint32_t aux_offset[] =
 	0x00, 0x1c, 0x38, 0x54, 0x70, 0x8c,
 };
 
+static void aux_fifo_put_first(struct amdgpu_device *adev, uint32_t block, uint8_t val)
+{
+	uint32_t reg32 = AUX_SW_DATA_MASK(val) | AUX_SW_AUTOINCREMENT_DISABLE;
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + block, reg32, false);
+}
+
+static void aux_fifo_put(struct amdgpu_device *adev, uint32_t block, uint8_t val)
+{
+	uint32_t reg32 = AUX_SW_DATA_MASK(val);
+	amdgpu_mm_wreg(adev, AUX_SW_DATA + block, reg32, false);
+}
+
+static uint8_t aux_fifo_get(struct amdgpu_device *adev, uint32_t block)
+{
+	uint32_t reg32 = amdgpu_mm_rreg(adev, AUX_SW_DATA + block, false);
+	return reg32 >> 8;
+}
+
+static int aux_do_transfer(struct amdgpu_device *adev, uint32_t block, size_t bytes)
+{
+	uint32_t status;
+	int retry_count = 0;
+
+	/* clear the ACK */
+	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + block, AUX_SW_DONE_ACK, false);
+
+	/* write the size and GO bits */
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + block,
+		       AUX_SW_WR_BYTES(bytes) | AUX_SW_GO, false);
+
+	/* poll the status registers - TODO irq support */
+	do {
+		status = amdgpu_mm_rreg(adev, AUX_SW_STATUS + block, false);
+		if (status & AUX_SW_DONE)
+			break;
+
+		usleep_range(100, 200);
+	} while (retry_count++ < 1000);
+
+	if (retry_count >= 1000) {
+		DRM_ERROR("auxch hw never signalled completion, flags %08x\n",
+			  status);
+		return -EIO;
+	}
+
+	if (status & AUX_SW_RX_TIMEOUT)
+		return -ETIMEDOUT;
+
+	if (status & AUX_RX_ERROR_FLAGS) {
+		DRM_DEBUG_KMS("dp_aux_ch flags not zero: %08x\n", status);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 ssize_t
 amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 {
@@ -105,17 +161,19 @@ amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg
 	struct drm_device *dev = chan->dev;
 	struct amdgpu_device *adev = dev->dev_private;
 	int ret = 0, i;
-	uint32_t tmp, ack = 0;
+	uint32_t tmp, block, ack = 0;
 	int instance = chan->rec.i2c_id & 0xf;
-	u8 byte;
 	u8 *buf = msg->buffer;
-	int retry_count = 0;
-	int bytes;
-	int msize;
+	int bytes, msize;
 	bool is_write = false;
 
 	if (WARN_ON(msg->size > 16))
 		return -E2BIG;
+
+	if (WARN_ON(instance > 5))
+		return -EINVAL;
+
+	block = instance * 0x1c;
 
 	switch (msg->request & ~DP_AUX_I2C_MOT) {
 	case DP_AUX_NATIVE_WRITE:
@@ -147,96 +205,54 @@ amdgpu_native_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg
 	amdgpu_mm_wreg(adev, chan->rec.mask_clk_reg, tmp, false);
 
 	/* setup AUX control register with correct HPD pin */
-	tmp = amdgpu_mm_rreg(adev, AUX_CONTROL + aux_offset[instance], false);
+	tmp = amdgpu_mm_rreg(adev, AUX_CONTROL + block, false);
 
 	tmp &= AUX_HPD_SEL(0x7);
 	tmp |= AUX_HPD_SEL(chan->rec.hpd);
 	tmp |= AUX_EN | AUX_LS_READ_EN;
 
-	amdgpu_mm_wreg(adev, AUX_CONTROL + aux_offset[instance], tmp, false);
+	amdgpu_mm_wreg(adev, AUX_CONTROL + block, tmp, false);
 
 	/* atombios appears to write this twice lets copy it */
-	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + block,
 	       AUX_SW_WR_BYTES(bytes), false);
-	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
+	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + block,
 	       AUX_SW_WR_BYTES(bytes), false);
 
 	/* write the data header into the registers */
 	/* request, address, msg size */
-	byte = (msg->request << 4) | ((msg->address >> 16) & 0xf);
-	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte) | AUX_SW_AUTOINCREMENT_DISABLE, false);
-
-	byte = (msg->address >> 8) & 0xff;
-	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte), false);
-
-	byte = msg->address & 0xff;
-	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte), false);
-
-	byte = msize;
-	amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
-	       AUX_SW_DATA_MASK(byte), false);
+	aux_fifo_put_first(adev, block,
+			   (msg->request << 4) | ((msg->address >> 16) & 0xf));
+	aux_fifo_put(adev, block, msg->address >> 8);
+	aux_fifo_put(adev, block, msg->address >> 0);
+	aux_fifo_put(adev, block, msize);
 
 	/* if we are writing - write the msg buffer */
 	if (is_write) {
-		for (i = 0; i < msg->size; i++) {
-			amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
-			       AUX_SW_DATA_MASK(buf[i]), false);
-		}
+		for (i = 0; i < msg->size; i++)
+			aux_fifo_put(adev, block, buf[i]);
 	}
 
-	/* clear the ACK */
-	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK, false);
-
-	/* write the size and GO bits */
-	amdgpu_mm_wreg(adev, AUX_SW_CONTROL + aux_offset[instance],
-	       AUX_SW_WR_BYTES(bytes) | AUX_SW_GO, false);
-
-	/* poll the status registers - TODO irq support */
-	do {
-		tmp = amdgpu_mm_rreg(adev, AUX_SW_STATUS + aux_offset[instance], false);
-		if (tmp & AUX_SW_DONE) {
-			break;
-		}
-		usleep_range(100, 200);
-	} while (retry_count++ < 1000);
-
-	if (retry_count >= 1000) {
-		DRM_ERROR("auxch hw never signalled completion, error %08x\n", tmp);
-		ret = -EIO;
+	ret = aux_do_transfer(adev, block, bytes);
+	if (ret < 0)
 		goto done;
-	}
-
-	if (tmp & AUX_SW_RX_TIMEOUT) {
-		ret = -ETIMEDOUT;
-		goto done;
-	}
-	if (tmp & AUX_RX_ERROR_FLAGS) {
-		DRM_DEBUG_KMS("dp_aux_ch flags not zero: %08x\n", tmp);
-		ret = -EIO;
-		goto done;
-	}
 
 	bytes = AUX_SW_REPLY_GET_BYTE_COUNT(tmp);
 	if (bytes) {
-		amdgpu_mm_wreg(adev, AUX_SW_DATA + aux_offset[instance],
+		amdgpu_mm_wreg(adev, AUX_SW_DATA + block,
 		       AUX_SW_DATA_RW | AUX_SW_AUTOINCREMENT_DISABLE, false);
 
-		tmp = amdgpu_mm_rreg(adev, AUX_SW_DATA + aux_offset[instance], false);
-		ack = (tmp >> 8) & 0xff;
+		ack = aux_fifo_get(adev, block);
 
-		for (i = 0; i < bytes - 1; i++) {
-			tmp = amdgpu_mm_rreg(adev, AUX_SW_DATA + aux_offset[instance], false);
-			if (buf)
-				buf[i] = (tmp >> 8) & 0xff;
-		}
-		if (buf)
+		if (buf) {
+			for (i = 0; i < bytes - 1; i++)
+				buf[i] = aux_fifo_get(adev, block);
+
 			ret = bytes - 1;
+		}
 	}
 
-	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + aux_offset[instance], AUX_SW_DONE_ACK, false);
+	amdgpu_mm_wreg(adev, AUX_SW_INTERRUPT_CONTROL + block, AUX_SW_DONE_ACK, false);
 
 	if (is_write)
 		ret = msg->size;
