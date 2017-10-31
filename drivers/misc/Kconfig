@@ -403,6 +403,16 @@ config TI_DAC7512
 	  This driver can also be built as a module. If so, the module
 	  will be called ti_dac7512.
 
+config TI_EQEP
+	tristate "Texas Instruments EQEP quadrature encoder controller"
+	depends on PWM_TIPWMSS
+	help
+	  This driver provides support for the Enhanced Quadrature Encoder Pulse
+	  module on Texas Instruments AM33XX SOCs.
+
+	  The EQEP hardware module is part of the PWMSS block, hence the
+	  dependency on PWM_TIPWMSS.
+
 config VMWARE_BALLOON
 	tristate "VMware Balloon Driver"
 	depends on VMWARE_VMCI && X86 && HYPERVISOR_GUEST
