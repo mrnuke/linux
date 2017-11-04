@@ -1,0 +1,33 @@
+* Texas instruments eQEP quadrature decoder
+
+Required properties:
+- compatible : must be "ti,am33xx-eqep"
+- reg : physical base address and size of the registers map.
+- count_mode : Should be one of "quadrature", "clock-dir", "up" or "down".
+    - "quadrature" : The QEPA/QEPB signals are quadrature encoded
+    - "clock-dir" : QEPA is a clock signal, and QEPB is a direction signal.
+    - "up" : count up on QEPA transitions. QEPB is ignored.
+    - "up" : count down on QEPA transitions. QEPB is ignored.
+
+Optional properties:
+- clocks: Handle to the eQEP's functional clock.
+- clock-names: Must be set to "fck".
+- qa_inverted : The QEPA signal is inverted.
+- qb_inverted : The QEPA signal is inverted.
+- qi_active_low : Index channel (QEPI) is active low.
+- qs_active_low : Strobe signal (QEPS) is active low.
+- ti,swap_qepa_qepb : Select QEPA signal as QEPB input and vice-versa. This
+    effectively causes the encoder to count in the opposite directon. This
+    setting is only effective when the "count_mode" is set to "quadrature".
+
+Example:
+
+eqep0: eqep@0x48300180 {
+	compatible = "ti,am33xx-eqep";
+	reg = <0x48300180 0x80>;
+	clocks = <&l4ls_gclk>;
+	clock-names = "fck";
+
+	count_mode = "quadrature";
+	qi_active_low;
+};
