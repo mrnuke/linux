@@ -232,40 +232,70 @@ static ssize_t eqep_set_enabled(struct device *dev,
 }
 
 /* Read the current position counter.
- * In absolute mode, get the current position. However, in relative mode
- * return the last latched position.
+ * In absolute mode, get the current position, min and max reset values, and
+ * the position that was latched on the last index event.
+ * In relative mode, only the last latched position is relevant.
  */
 static ssize_t eqep_get_position(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
-	uint16_t pos_reg;
+	uint32_t pos, min, max, latched;
 	struct eqep *eqep = dev_get_drvdata(dev);
 
 	pm_runtime_get_sync(dev);
 
-	pos_reg = (eqep->op_mode == TIEQEP_MODE_ABSOLUTE) ?
-		   EQEP_POSCNT : EQEP_POSLAT;
-	return sprintf(buf, "%d\n", eqep_read32(eqep, pos_reg));
+	pos = eqep_read32(eqep, EQEP_POSCNT);
+	min = eqep_read32(eqep, EQEP_POSINIT);
+	max = eqep_read32(eqep, EQEP_POSMAX);
+	latched = eqep_read32(eqep, EQEP_POSILAT);
+
+	if (eqep->op_mode == TIEQEP_MODE_ABSOLUTE)
+		return sprintf(buf, "%u, [%u, %u], %u\n",
+			pos, min, max, latched);
+
+	return sprintf(buf, "%d\n", eqep_read32(eqep, EQEP_POSLAT));
 }
 
+#include <linux/slab.h>
 /* Adjust/calibrate the position counter. */
 static ssize_t eqep_set_position(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
 {
-	int ret;
-	int32_t position;
+	int ret, i;
+	char *next, *buf_copy;
+	uint32_t bounds[3];
 	struct eqep *eqep = dev_get_drvdata(dev);
 
-	ret = kstrtos32(buf, 0, &position);
-	if (ret)
-		return ret;
+
+	/* It only makes sense to adjust the position in absolute mode. */
+	if (eqep->op_mode != TIEQEP_MODE_ABSOLUTE)
+		return -ENOTSUPP;
 
 	pm_runtime_get_sync(dev);
 
-	/* It only makes sense to adjust the position in absolute mode. */
-	if (eqep->op_mode == TIEQEP_MODE_ABSOLUTE)
-		eqep_write32(eqep, EQEP_POSCNT, position);
+
+	buf_copy = kstrdup(buf, GFP_KERNEL);
+	next = buf_copy;
+
+	for (i = 0; i < ARRAY_SIZE(bounds); i++) {
+		next = strsep(&buf_copy, " ");
+		if (!next)
+			return -EINVAL;
+
+		ret = kstrtou32(next, 0, bounds + i);
+		if (ret)
+			return ret;
+	}
+
+	dev_err(&eqep->pdev->dev, "%u, %u, %u\n", bounds[0], bounds[1], bounds[2]);
+
+	kfree(buf_copy);
+
+	eqep_write32(eqep, EQEP_POSCNT, bounds[0]);
+	eqep_write32(eqep, EQEP_POSINIT, bounds[1]);
+	eqep_write32(eqep, EQEP_POSMAX, bounds[2]);
+
 	return count;
 }
 
