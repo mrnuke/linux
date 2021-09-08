@@ -41,6 +41,8 @@
 
 #define ATH11K_QMI_DEVICE_BAR_SIZE		0x200000
 
+#define ATH11K_QMI_IPQ9574_M3_DUMP_ADDRESS      0x4D600000
+
 struct ath11k_base;
 
 enum ath11k_qmi_file_type {
