@@ -3276,6 +3276,8 @@ static void ath11k_qmi_driver_event_work(struct work_struct *work)
 				clear_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
 				ret = ath11k_core_qmi_firmware_ready(ab);
 				if (ret) {
+					ath11k_warn(ab,
+						    "failed to init after firmware ready: %d\n", ret);
 					set_bit(ATH11K_FLAG_QMI_FAIL, &ab->dev_flags);
 					break;
 				}
