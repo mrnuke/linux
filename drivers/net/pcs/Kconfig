@@ -45,6 +45,12 @@ config PCS_QCOM_IPQ9574
 	  IPQ9574 SoC. The UNIPHY PCS supports both PCS and XPCS functions
 	  to support different interface modes for MAC to PHY connections.
 
+config PCS_QCA8K
+	tristate
+	help
+	  This module provides helpers to phylink for managing the qca8k PCS
+	  which is part of the qca8386 and qca8084 Ethernet SERDES.
+
 config PCS_RZN1_MIIC
 	tristate "Renesas RZ/N1 MII converter"
 	depends on OF && (ARCH_RZN1 || COMPILE_TEST)
