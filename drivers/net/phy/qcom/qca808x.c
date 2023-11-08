@@ -94,6 +94,15 @@
 #define QCA8084_MMD3_CDT_NEAR_CTRL		0x807f
 #define QCA8084_CDT_NEAR_BYPASS			BIT(15)
 
+/* QCA8084 ADC clock edge */
+#define QCA8084_ADC_CLK_SEL			0x8b80
+#define QCA8084_ADC_CLK_SEL_ACLK		GENMASK(7, 4)
+#define QCA8084_ADC_CLK_SEL_ACLK_FALL		0xf
+#define QCA8084_ADC_CLK_SEL_ACLK_RISE		0x0
+
+#define QCA8084_MSE_THRESHOLD			0x800a
+#define QCA8084_MSE_THRESHOLD_2P5G_VAL		0x51c6
+
 MODULE_DESCRIPTION("Qualcomm Atheros QCA808X PHY driver");
 MODULE_AUTHOR("Matus Ujhelyi, Luo Jie");
 MODULE_LICENSE("GPL");
@@ -660,6 +669,34 @@ static int qca808x_led_polarity_set(struct phy_device *phydev, int index,
 			      active_low ? 0 : QCA808X_LED_ACTIVE_HIGH);
 }
 
+static int qca8084_config_init(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII)
+		__set_bit(PHY_INTERFACE_MODE_10G_QXGMII,
+			  phydev->possible_interfaces);
+	else
+		qca808x_fill_possible_interfaces(phydev);
+
+	/* Configure the ADC to convert the signal using falling edge
+	 * instead of the default rising edge.
+	 */
+	ret = at803x_debug_reg_mask(phydev, QCA8084_ADC_CLK_SEL,
+				    QCA8084_ADC_CLK_SEL_ACLK,
+				    FIELD_PREP(QCA8084_ADC_CLK_SEL_ACLK,
+					       QCA8084_ADC_CLK_SEL_ACLK_FALL));
+	if (ret < 0)
+		return ret;
+
+	/* Adjust MSE threshold value to avoid link issue with
+	 * some link partner.
+	 */
+	return phy_write_mmd(phydev, MDIO_MMD_PMAPMD,
+			     QCA8084_MSE_THRESHOLD,
+			     QCA8084_MSE_THRESHOLD_2P5G_VAL);
+}
+
 static struct phy_driver qca808x_driver[] = {
 {
 	/* Qualcomm QCA8081 */
@@ -708,6 +745,7 @@ static struct phy_driver qca808x_driver[] = {
 	.soft_reset		= qca808x_soft_reset,
 	.cable_test_start	= qca808x_cable_test_start,
 	.cable_test_get_status	= qca808x_cable_test_get_status,
+	.config_init		= qca8084_config_init,
 }, };
 
 module_phy_driver(qca808x_driver);
