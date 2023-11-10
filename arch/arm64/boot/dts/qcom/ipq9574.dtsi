@@ -231,8 +231,8 @@
 
 
 		q6_region: wcnss@4ab00000 {
-			no-map;
 			reg = <0x0 0x4ab00000 0x0 0x02b00000>;
+			no-map;
 		};
 
 		m3_dump: m3_dump@4d600000 {
@@ -1708,7 +1708,8 @@
 		};
 
 		q6v5_wcss: remoteproc@cd00000 {
-			compatible = "qcom,ipq9574-wcss-pil";
+			//compatible = "qcom,ipq9574-wcss-pil";
+			compatible = "qcom,ipq9574-q6-mpd";
 			reg = <0x0cd00000 0x4040>,
 			      <0xCB50000 0x8>,
 			      <0x004ab000 0x20>;
@@ -1717,6 +1718,8 @@
 				    "wcmn",
 				    "rmb";
 
+			firmware-name = "IPQ9574/q6_fw.mdt",
+					"IPQ9574/m3_fw.mdt";
 			interrupts-extended = <&intc GIC_SPI 325 IRQ_TYPE_EDGE_RISING>,
 					      <&wcss_smp2p_in 0 IRQ_TYPE_NONE>,
 					      <&wcss_smp2p_in 1 IRQ_TYPE_NONE>,
@@ -1796,13 +1799,7 @@
 					   <&wcss_smp2p_out 1>;
 			qcom,smem-state-names = "shutdown",
 						"stop";
-
-			memory-region = <&q6_region>,
-					<&m3_dump>,
-					<&q6_etr_region>,
-					<&q6_caldb_region>;
-
-			// status = "disabled";
+			memory-region = <&q6_region>;
 
 			glink-edge {
 				interrupts = <GIC_SPI 321 IRQ_TYPE_EDGE_RISING>;
@@ -2061,7 +2058,6 @@
 
 		wcss_smp2p_out: master-kernel {
 			qcom,entry-name = "master-kernel";
-			qcom,smp2p-feature-ssr-ack;
 			#qcom,smem-state-cells = <1>;
 		};
 
