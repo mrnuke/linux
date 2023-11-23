@@ -295,6 +295,8 @@
 		mdio: mdio@90000 {
 			compatible =  "qcom,ipq9574-mdio", "qcom,ipq4019-mdio";
 			reg = <0x00090000 0x64>;
+			pinctrl-0 = <&mdio_pins>;
+			pinctrl-names = "default";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			clocks = <&gcc GCC_MDIO_AHB_CLK>;
@@ -411,6 +413,22 @@
 			gpio-ranges = <&tlmm 0 0 65>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
+
+			mdio_pins: mdio-pins {
+				mdc-state {
+					pins = "gpio38";
+					function = "mdc";
+					drive-strength = <8>;
+					bias-disable;
+				};
+
+				mdio-state {
+					pins = "gpio39";
+					function = "mdio";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
+			};
 
 			uart2_pins: uart2-state {
 				pins = "gpio34", "gpio35";
