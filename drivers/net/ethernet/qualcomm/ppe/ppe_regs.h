@@ -11,6 +11,14 @@
  * BM port (0-7) is matched to EDMA port 0, BM port (8-13) is matched
  * to PPE physical port 1-6, BM port 14 is matched to EIP.
  */
+#define PPE_EG_BRIDGE_CONFIG_ADDR		0x20044
+#define PPE_EG_BRIDGE_CONFIG_QUEUE_CNT_EN	BIT(2)
+
+#define PPE_DEQ_OPR_TBL_ADDR			0x430000
+#define PPE_DEQ_OPR_TBL_NUM			300
+#define PPE_DEQ_OPR_TBL_INC			0x10
+#define PPE_DEQ_OPR_TBL_DEQ_DISABLE		BIT(0)
+
 #define PPE_BM_PORT_FC_MODE_ADDR		0x600100
 #define PPE_BM_PORT_FC_MODE_INC			0x4
 #define PPE_BM_PORT_FC_MODE_EN			BIT(0)
@@ -50,5 +58,79 @@
 	u32p_replace_bits((u32 *)(tbl_cfg) + 0x1, value, PPE_BM_PORT_FC_W1_DYNAMIC)
 #define PPE_BM_PORT_FC_SET_PRE_ALLOC(tbl_cfg, value)	\
 	u32p_replace_bits((u32 *)(tbl_cfg) + 0x1, value, PPE_BM_PORT_FC_W1_PRE_ALLOC)
+
+/* PPE unicast queue (0-255) configurations. */
+#define PPE_AC_UNI_QUEUE_CFG_TBL_ADDR		0x848000
+#define PPE_AC_UNI_QUEUE_CFG_TBL_NUM		256
+#define PPE_AC_UNI_QUEUE_CFG_TBL_INC		0x10
+#define PPE_AC_UNI_QUEUE_CFG_W0_EN		BIT(0)
+#define PPE_AC_UNI_QUEUE_CFG_W0_WRED_EN		BIT(1)
+#define PPE_AC_UNI_QUEUE_CFG_W0_FC_EN		BIT(2)
+#define PPE_AC_UNI_QUEUE_CFG_W0_COLOR_AWARE	BIT(3)
+#define PPE_AC_UNI_QUEUE_CFG_W0_GRP_ID		GENMASK(5, 4)
+#define PPE_AC_UNI_QUEUE_CFG_W0_PRE_LIMIT	GENMASK(16, 6)
+#define PPE_AC_UNI_QUEUE_CFG_W0_DYNAMIC		BIT(17)
+#define PPE_AC_UNI_QUEUE_CFG_W0_WEIGHT		GENMASK(20, 18)
+#define PPE_AC_UNI_QUEUE_CFG_W0_THRESHOLD	GENMASK(31, 21)
+#define PPE_AC_UNI_QUEUE_CFG_W3_GRN_RESUME	GENMASK(23, 13)
+
+#define PPE_AC_UNI_QUEUE_SET_EN(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_EN)
+#define PPE_AC_UNI_QUEUE_SET_GRP_ID(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_GRP_ID)
+#define PPE_AC_UNI_QUEUE_SET_PRE_LIMIT(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_PRE_LIMIT)
+#define PPE_AC_UNI_QUEUE_SET_DYNAMIC(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_DYNAMIC)
+#define PPE_AC_UNI_QUEUE_SET_WEIGHT(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_WEIGHT)
+#define PPE_AC_UNI_QUEUE_SET_THRESHOLD(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_UNI_QUEUE_CFG_W0_THRESHOLD)
+#define PPE_AC_UNI_QUEUE_SET_GRN_RESUME(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)(tbl_cfg) + 0x3, value, PPE_AC_UNI_QUEUE_CFG_W3_GRN_RESUME)
+
+/* PPE multicast queue (256-299) configurations. */
+#define PPE_AC_MUL_QUEUE_CFG_TBL_ADDR		0x84a000
+#define PPE_AC_MUL_QUEUE_CFG_TBL_NUM		44
+#define PPE_AC_MUL_QUEUE_CFG_TBL_INC		0x10
+#define PPE_AC_MUL_QUEUE_CFG_W0_EN		BIT(0)
+#define PPE_AC_MUL_QUEUE_CFG_W0_FC_EN		BIT(1)
+#define PPE_AC_MUL_QUEUE_CFG_W0_COLOR_AWARE	BIT(2)
+#define PPE_AC_MUL_QUEUE_CFG_W0_GRP_ID		GENMASK(4, 3)
+#define PPE_AC_MUL_QUEUE_CFG_W0_PRE_LIMIT	GENMASK(15, 5)
+#define PPE_AC_MUL_QUEUE_CFG_W0_THRESHOLD	GENMASK(26, 16)
+#define PPE_AC_MUL_QUEUE_CFG_W2_RESUME		GENMASK(17, 7)
+
+#define PPE_AC_MUL_QUEUE_SET_EN(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_MUL_QUEUE_CFG_W0_EN)
+#define PPE_AC_MUL_QUEUE_SET_GRN_GRP_ID(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_MUL_QUEUE_CFG_W0_GRP_ID)
+#define PPE_AC_MUL_QUEUE_SET_GRN_PRE_LIMIT(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_MUL_QUEUE_CFG_W0_PRE_LIMIT)
+#define PPE_AC_MUL_QUEUE_SET_GRN_THRESHOLD(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_AC_MUL_QUEUE_CFG_W0_THRESHOLD)
+#define PPE_AC_MUL_QUEUE_SET_GRN_RESUME(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)(tbl_cfg) + 0x2, value, PPE_AC_MUL_QUEUE_CFG_W2_RESUME)
+
+/* PPE admission control group (0-3) configurations */
+#define PPE_AC_GRP_CFG_TBL_ADDR			0x84c000
+#define PPE_AC_GRP_CFG_TBL_NUM			0x4
+#define PPE_AC_GRP_CFG_TBL_INC			0x10
+#define PPE_AC_GRP_W0_AC_EN			BIT(0)
+#define PPE_AC_GRP_W0_AC_FC_EN			BIT(1)
+#define PPE_AC_GRP_W0_COLOR_AWARE		BIT(2)
+#define PPE_AC_GRP_W0_THRESHOLD_LOW		GENMASK(31, 25)
+#define PPE_AC_GRP_W1_THRESHOLD_HIGH		GENMASK(3, 0)
+#define PPE_AC_GRP_W1_BUF_LIMIT			GENMASK(14, 4)
+#define PPE_AC_GRP_W2_RESUME_GRN		GENMASK(15, 5)
+#define PPE_AC_GRP_W2_PRE_ALLOC			GENMASK(26, 16)
+
+#define PPE_AC_GRP_SET_BUF_LIMIT(tbl_cfg, value)	\
+	u32p_replace_bits((u32 *)(tbl_cfg) + 0x1, value, PPE_AC_GRP_W1_BUF_LIMIT)
+
+#define PPE_ENQ_OPR_TBL_ADDR			0x85c000
+#define PPE_ENQ_OPR_TBL_NUM			300
+#define PPE_ENQ_OPR_TBL_INC			0x10
+#define PPE_ENQ_OPR_TBL_ENQ_DISABLE		BIT(0)
 
 #endif
