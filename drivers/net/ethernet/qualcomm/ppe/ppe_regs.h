@@ -23,6 +23,43 @@
 #define PPE_RX_FIFO_CFG_INC			4
 #define PPE_RX_FIFO_CFG_THRSH			GENMASK(2, 0)
 
+#define PPE_DROP_CNT_ADDR			0xb024
+#define PPE_DROP_CNT_NUM			8
+#define PPE_DROP_CNT_INC			4
+
+/* BM port drop counter */
+#define PPE_DROP_STAT_ADDR			0xe000
+#define PPE_DROP_STAT_NUM			30
+#define PPE_DROP_STAT_INC			0x10
+
+#define PPE_EPE_DBG_IN_CNT_ADDR			0x26054
+#define PPE_EPE_DBG_IN_CNT_NUM			1
+#define PPE_EPE_DBG_IN_CNT_INC			0x4
+
+#define PPE_EPE_DBG_OUT_CNT_ADDR		0x26070
+#define PPE_EPE_DBG_OUT_CNT_NUM			1
+#define PPE_EPE_DBG_OUT_CNT_INC			0x4
+
+/* Egress VLAN counter */
+#define PPE_EG_VSI_COUNTER_TBL_ADDR		0x41000
+#define PPE_EG_VSI_COUNTER_TBL_NUM		64
+#define PPE_EG_VSI_COUNTER_TBL_INC		0x10
+
+/* Port TX counter */
+#define PPE_PORT_TX_COUNTER_TBL_ADDR		0x45000
+#define PPE_PORT_TX_COUNTER_TBL_NUM		8
+#define PPE_PORT_TX_COUNTER_TBL_INC		0x10
+
+/* Virtual port TX counter */
+#define PPE_VPORT_TX_COUNTER_TBL_ADDR		0x47000
+#define PPE_VPORT_TX_COUNTER_TBL_NUM		256
+#define PPE_VPORT_TX_COUNTER_TBL_INC		0x10
+
+/* Queue counter */
+#define PPE_QUEUE_TX_COUNTER_TBL_ADDR		0x4a000
+#define PPE_QUEUE_TX_COUNTER_TBL_NUM		300
+#define PPE_QUEUE_TX_COUNTER_TBL_INC		0x10
+
 /* RSS configs contributes to the random RSS hash value generated, which
  * is used to configure the queue offset.
  */
@@ -224,6 +261,47 @@
 #define PPE_L2_PORT_SET_DST_INFO(tbl_cfg, value)		\
 	u32p_replace_bits((u32 *)tbl_cfg, value, PPE_L2_VP_PORT_W0_DST_INFO)
 
+/* Port RX and RX drop counter */
+#define PPE_PORT_RX_CNT_TBL_ADDR		0x150000
+#define PPE_PORT_RX_CNT_TBL_NUM			256
+#define PPE_PORT_RX_CNT_TBL_INC			0x20
+
+/* Physical port RX and RX drop counter */
+#define PPE_PHY_PORT_RX_CNT_TBL_ADDR		0x156000
+#define PPE_PHY_PORT_RX_CNT_TBL_NUM		8
+#define PPE_PHY_PORT_RX_CNT_TBL_INC		0x20
+
+/* Counter for the packet to CPU port */
+#define PPE_DROP_CPU_CNT_TBL_ADDR		0x160000
+#define PPE_DROP_CPU_CNT_TBL_NUM		1280
+#define PPE_DROP_CPU_CNT_TBL_INC		0x10
+
+/* VLAN counter */
+#define PPE_VLAN_CNT_TBL_ADDR			0x178000
+#define PPE_VLAN_CNT_TBL_NUM			64
+#define PPE_VLAN_CNT_TBL_INC			0x10
+
+/* PPE L2 counter */
+#define PPE_PRE_L2_CNT_TBL_ADDR			0x17c000
+#define PPE_PRE_L2_CNT_TBL_NUM			64
+#define PPE_PRE_L2_CNT_TBL_INC			0x20
+
+/* Port TX drop counter */
+#define PPE_PORT_TX_DROP_CNT_TBL_ADDR		0x17d000
+#define PPE_PORT_TX_DROP_CNT_TBL_NUM		8
+#define PPE_PORT_TX_DROP_CNT_TBL_INC		0x10
+
+/* Virtual port TX counter */
+#define PPE_VPORT_TX_DROP_CNT_TBL_ADDR		0x17e000
+#define PPE_VPORT_TX_DROP_CNT_TBL_NUM		256
+#define PPE_VPORT_TX_DROP_CNT_TBL_INC		0x10
+
+#define PPE_TPR_PKT_CNT_ADDR			0x1d0080
+
+#define PPE_IPR_PKT_CNT_ADDR			0x1e0080
+#define PPE_IPR_PKT_CNT_NUM			8
+#define PPE_IPR_PKT_CNT_INC			4
+
 #define PPE_TL_SERVICE_TBL_ADDR			0x306000
 #define PPE_TL_SERVICE_TBL_NUM			256
 #define PPE_TL_SERVICE_TBL_INC			4
@@ -324,6 +402,16 @@
 #define PPE_BM_PORT_GROUP_ID_ADDR		0x600180
 #define PPE_BM_PORT_GROUP_ID_INC		0x4
 #define PPE_BM_PORT_GROUP_ID_SHARED_GROUP_ID	GENMASK(1, 0)
+
+#define PPE_BM_USED_CNT_ADDR			0x6001c0
+#define PPE_BM_USED_CNT_NUM			15
+#define PPE_BM_USED_CNT_INC			0x4
+#define PPE_BM_USED_CNT_VAL			GENMASK(10, 0)
+
+#define PPE_BM_REACT_CNT_ADDR			0x600240
+#define PPE_BM_REACT_CNT_NUM			15
+#define PPE_BM_REACT_CNT_INC			0x4
+#define PPE_BM_REACT_CNT_VAL			GENMASK(8, 0)
 
 #define PPE_BM_SHARED_GROUP_CFG_ADDR		0x600290
 #define PPE_BM_SHARED_GROUP_CFG_INC		0x4
@@ -441,6 +529,16 @@
 
 #define PPE_AC_GRP_SET_BUF_LIMIT(tbl_cfg, value)	\
 	u32p_replace_bits((u32 *)(tbl_cfg) + 0x1, value, PPE_AC_GRP_W1_BUF_LIMIT)
+
+#define PPE_AC_UNI_QUEUE_CNT_TBL_ADDR		0x84e000
+#define PPE_AC_UNI_QUEUE_CNT_TBL_NUM		256
+#define PPE_AC_UNI_QUEUE_CNT_TBL_INC		0x10
+#define PPE_AC_UNI_QUEUE_CNT_TBL_PEND_CNT	GENMASK(12, 0)
+
+#define PPE_AC_MUL_QUEUE_CNT_TBL_ADDR		0x852000
+#define PPE_AC_MUL_QUEUE_CNT_TBL_NUM		44
+#define PPE_AC_MUL_QUEUE_CNT_TBL_INC		0x10
+#define PPE_AC_MUL_QUEUE_CNT_TBL_PEND_CNT	GENMASK(12, 0)
 
 #define PPE_ENQ_OPR_TBL_ADDR			0x85c000
 #define PPE_ENQ_OPR_TBL_NUM			300
