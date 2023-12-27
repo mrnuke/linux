@@ -18,6 +18,9 @@
 #define PPE_QUEUE_INTER_PRI_NUM			16
 #define PPE_QUEUE_HASH_NUM			256
 
+/* The service code is used by EDMA driver to transmit packet to PPE. */
+#define PPE_EDMA_SC_BYPASS_ID			1
+
 /**
  * enum ppe_queue_class_type - PPE queue class type
  * @PPE_QUEUE_CLASS_PRIORITY: Queue offset configured from internal priority
