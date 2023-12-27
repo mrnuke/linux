@@ -38,3 +38,47 @@ int ppe_queue_priority_set(struct ppe_device *ppe_dev,
 
 	return ppe_queue_scheduler_set(ppe_dev, node_id, level, port, sch_cfg);
 }
+
+/**
+ * ppe_edma_queue_offset_config - Configure queue offset for EDMA interface
+ * @ppe_dev: PPE device
+ * @class: The class to configure queue offset
+ * @index: Class index, internal priority or hash value
+ * @queue_offset: Queue offset value
+ *
+ * PPE EDMA queue offset is configured based on the PPE internal priority or
+ * RSS hash value, the profile ID is fixed to 0 for EDMA interface.
+ *
+ * Return 0 on success, negative error code on failure.
+ */
+int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
+				 enum ppe_queue_class_type class,
+				 int index, int queue_offset)
+{
+	if (class == PPE_QUEUE_CLASS_PRIORITY)
+		return ppe_queue_ucast_pri_class_set(ppe_dev, 0,
+						     index, queue_offset);
+
+	return ppe_queue_ucast_hash_class_set(ppe_dev, 0,
+					      index, queue_offset);
+}
+
+/**
+ * ppe_edma_queue_resource_get - Get EDMA queue resource
+ * @ppe_dev: PPE device
+ * @type: Resource type
+ * @res_start: Resource start ID returned
+ * @res_end: Resource end ID returned
+ *
+ * PPE EDMA queue resource includes unicast queue and multicast queue.
+ *
+ * Return 0 on success, negative error code on failure.
+ */
+int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
+				int *res_start, int *res_end)
+{
+	if (type != PPE_RES_UCAST && type != PPE_RES_MCAST)
+		return -EINVAL;
+
+	return ppe_port_resource_get(ppe_dev, 0, type, res_start, res_end);
+};
