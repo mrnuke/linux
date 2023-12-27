@@ -20,6 +20,8 @@
 #define PPE_RSS_HASH_IP_LENGTH			4
 #define PPE_RSS_HASH_TUPLES			5
 
+#define PPE_RING_MAPPED_BP_QUEUE_WORD_COUNT	10
+
 /**
  * struct ppe_qos_scheduler_cfg - PPE QoS scheduler configuration.
  * @flow_id: PPE flow ID.
@@ -263,4 +265,7 @@ int ppe_servcode_config_set(struct ppe_device *ppe_dev,
 int ppe_counter_set(struct ppe_device *ppe_dev, int port, bool enable);
 int ppe_rss_hash_config_set(struct ppe_device *ppe_dev, int mode,
 			    struct ppe_rss_hash_cfg hash_cfg);
+int ppe_ring_queue_map_set(struct ppe_device *ppe_dev,
+			   int ring_id,
+			   u32 *queue_map);
 #endif

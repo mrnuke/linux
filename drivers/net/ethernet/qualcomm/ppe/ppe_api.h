@@ -55,4 +55,6 @@ int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
 				 int index, int queue_offset);
 int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
 				int *res_start, int *res_end);
+int ppe_edma_ring_to_queues_config(struct ppe_device *ppe_dev, int ring_id,
+				   int num, int queues[] __counted_by(num));
 #endif
