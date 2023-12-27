@@ -82,3 +82,26 @@ int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
 
 	return ppe_port_resource_get(ppe_dev, 0, type, res_start, res_end);
 };
+
+/**
+ * ppe_edma_ring_to_queues_config - Map EDMA ring to PPE queues
+ * @ppe_dev: PPE device
+ * @ring_id: EDMA ring ID
+ * @num: Number of queues mapped to EDMA ring
+ * @queues: PPE queue IDs
+ *
+ * PPE queues are configured to map with the special EDMA ring ID.
+ *
+ * Return 0 on success, negative error code on failure.
+ */
+int ppe_edma_ring_to_queues_config(struct ppe_device *ppe_dev, int ring_id,
+				   int num, int queues[] __counted_by(num))
+{
+	u32 queue_bmap[PPE_RING_MAPPED_BP_QUEUE_WORD_COUNT] = {};
+	int index;
+
+	for (index = 0; index < num; index++)
+		queue_bmap[queues[index] / 32] |= BIT_MASK(queues[index] % 32);
+
+	return ppe_ring_queue_map_set(ppe_dev, ring_id, queue_bmap);
+}
