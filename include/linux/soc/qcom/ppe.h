@@ -17,6 +17,7 @@ struct ppe_device {
 	struct device *dev;
 	struct regmap *regmap;
 	struct ppe_device_ops *ppe_ops;
+	struct dentry *debugfs_root;
 	bool is_ppe_probed;
 	void *ppe_priv;
 };

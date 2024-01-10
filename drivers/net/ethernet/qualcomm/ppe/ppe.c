@@ -17,6 +17,7 @@
 #include "ppe.h"
 #include "ppe_regs.h"
 #include "ppe_ops.h"
+#include "ppe_debugfs.h"
 
 #define PPE_SCHEDULER_PORT_NUM		8
 #define MPPE_SCHEDULER_PORT_NUM		3
@@ -1328,11 +1329,18 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 
 	ppe_dev->ppe_ops = &qcom_ppe_ops;
 	ppe_dev->is_ppe_probed = true;
+	ppe_debugfs_setup(ppe_dev);
+
 	return 0;
 }
 
 static int qcom_ppe_remove(struct platform_device *pdev)
 {
+	struct ppe_device *ppe_dev;
+
+	ppe_dev = platform_get_drvdata(pdev);
+	ppe_debugfs_teardown(ppe_dev);
+
 	return 0;
 }
 

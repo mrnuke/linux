@@ -19,6 +19,105 @@
 #define PPE_RX_FIFO_CFG_INC					4
 #define PPE_RX_FIFO_CFG_THRSH					GENMASK(2, 0)
 
+#define PPE_DROP_CNT						0xb024
+#define PPE_DROP_CNT_NUM					8
+#define PPE_DROP_CNT_INC					4
+#define PPE_DROP_CNT_PKT_CNT					GENMASK(31, 0)
+
+#define PPE_DROP_STAT						0xe000
+#define PPE_DROP_STAT_NUM					30
+#define PPE_DROP_STAT_INC					0x10
+#define PPE_DROP_STAT_PKT_CNT					GENMASK(31, 0)
+
+/* BM port drop counter */
+struct ppe_drop_stat {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_drop_stat_u {
+	u32 val[3];
+	struct ppe_drop_stat bf;
+};
+
+#define PPE_EPE_DBG_IN_CNT					0x26054
+#define PPE_EPE_DBG_IN_CNT_NUM					1
+#define PPE_EPE_DBG_IN_CNT_INC					0x4
+
+#define PPE_EPE_DBG_OUT_CNT					0x26070
+#define PPE_EPE_DBG_OUT_CNT_NUM					1
+#define PPE_EPE_DBG_OUT_CNT_INC					0x4
+
+#define PPE_EG_VSI_COUNTER_TBL					0x41000
+#define PPE_EG_VSI_COUNTER_TBL_NUM				64
+#define PPE_EG_VSI_COUNTER_TBL_INC				0x10
+
+/* Egress VLAN counter */
+struct ppe_eg_vsi_cnt_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_eg_vsi_cnt_tbl_u {
+	u32 val[3];
+	struct ppe_eg_vsi_cnt_tbl bf;
+};
+
+#define PPE_PORT_TX_COUNTER_TBL					0x45000
+#define PPE_PORT_TX_COUNTER_TBL_NUM				8
+#define PPE_PORT_TX_COUNTER_TBL_INC				0x10
+
+/* Port TX counter */
+struct ppe_port_tx_counter_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_port_tx_counter_tbl_u {
+	u32 val[3];
+	struct ppe_port_tx_counter_tbl bf;
+};
+
+#define PPE_VPORT_TX_COUNTER_TBL				0x47000
+#define PPE_VPORT_TX_COUNTER_TBL_NUM				256
+#define PPE_VPORT_TX_COUNTER_TBL_INC				0x10
+
+/* Virtual port TX counter */
+struct ppe_vport_tx_counter_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_vport_tx_counter_tbl_u {
+	u32 val[3];
+	struct ppe_vport_tx_counter_tbl bf;
+};
+
+#define PPE_QUEUE_TX_COUNTER_TBL				0x4a000
+#define PPE_QUEUE_TX_COUNTER_TBL_NUM				300
+#define PPE_QUEUE_TX_COUNTER_TBL_INC				0x10
+
+/* Queue counter */
+struct ppe_queue_tx_counter_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_queue_tx_counter_tbl_u {
+	u32 val[3];
+	struct ppe_queue_tx_counter_tbl bf;
+};
+
 #define PPE_RSS_HASH_MASK					0xb4318
 #define PPE_RSS_HASH_MASK_NUM					1
 #define PPE_RSS_HASH_MASK_INC					4
@@ -196,6 +295,143 @@ union ppe_mru_mtu_ctrl_cfg_u {
 #define PPE_IN_L2_SERVICE_TBL_RX_CNT_EN				BIT(30)
 #define PPE_IN_L2_SERVICE_TBL_TX_CNT_EN				BIT(31)
 
+#define PPE_PORT_RX_CNT_TBL					0x150000
+#define PPE_PORT_RX_CNT_TBL_NUM					256
+#define PPE_PORT_RX_CNT_TBL_INC					0x20
+
+/* Port RX counter */
+struct ppe_port_rx_cnt_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    drop_pkt_cnt_0:24;
+	u32 drop_pkt_cnt_1:8,
+	    drop_byte_cnt_0:24;
+	u32 drop_byte_cnt_1:16,
+	    res0:16;
+};
+
+union ppe_port_rx_cnt_tbl_u {
+	u32 val[5];
+	struct ppe_port_rx_cnt_tbl bf;
+};
+
+#define PPE_PHY_PORT_RX_CNT_TBL					0x156000
+#define PPE_PHY_PORT_RX_CNT_TBL_NUM				8
+#define PPE_PHY_PORT_RX_CNT_TBL_INC				0x20
+
+/* Physical port RX and RX drop counter */
+struct ppe_phy_port_rx_cnt_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    drop_pkt_cnt_0:24;
+	u32 drop_pkt_cnt_1:8,
+	    drop_byte_cnt_0:24;
+	u32 drop_byte_cnt_1:16,
+	    res0:16;
+};
+
+union ppe_phy_port_rx_cnt_tbl_u {
+	u32 val[5];
+	struct ppe_phy_port_rx_cnt_tbl bf;
+};
+
+#define PPE_DROP_CPU_CNT_TBL					0x160000
+#define PPE_DROP_CPU_CNT_TBL_NUM				1280
+#define PPE_DROP_CPU_CNT_TBL_INC				0x10
+
+/* counter for the packet to CPU port */
+struct ppe_drop_cpu_cnt {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_drop_cpu_cnt_u {
+	u32 val[3];
+	struct ppe_drop_cpu_cnt bf;
+};
+
+#define PPE_VLAN_CNT_TBL					0x178000
+#define PPE_VLAN_CNT_TBL_NUM					64
+#define PPE_VLAN_CNT_TBL_INC					0x10
+
+/* VLAN counter */
+struct ppe_vlan_cnt {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_vlan_cnt_u {
+	u32 val[3];
+	struct ppe_vlan_cnt bf;
+};
+
+#define PPE_PRE_L2_CNT_TBL					0x17c000
+#define PPE_PRE_L2_CNT_TBL_NUM					64
+#define PPE_PRE_L2_CNT_TBL_INC					0x20
+
+/* PPE L2 counter */
+struct ppe_pre_l2_cnt_tbl {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    drop_pkt_cnt_0:24;
+	u32 drop_pkt_cnt_1:8,
+	    drop_byte_cnt_0:24;
+	u32 drop_byte_cnt_1:16,
+	    res0:16;
+};
+
+union ppe_pre_l2_cnt_tbl_u {
+	u32 val[5];
+	struct ppe_pre_l2_cnt_tbl bf;
+};
+
+#define PPE_PORT_TX_DROP_CNT_TBL				0x17d000
+#define PPE_PORT_TX_DROP_CNT_TBL_NUM				8
+#define PPE_PORT_TX_DROP_CNT_TBL_INC				0x10
+
+/* Port TX drop counter */
+struct ppe_port_tx_drop_cnt {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_port_tx_drop_u {
+	u32 val[3];
+	struct ppe_port_tx_drop_cnt bf;
+};
+
+#define PPE_VPORT_TX_DROP_CNT_TBL				0x17e000
+#define PPE_VPORT_TX_DROP_CNT_TBL_NUM				256
+#define PPE_VPORT_TX_DROP_CNT_TBL_INC				0x10
+
+/* Virtual port TX counter */
+struct ppe_vport_tx_drop_cnt {
+	u32 pkt_cnt;
+	u32 byte_cnt_0;
+	u32 byte_cnt_1:8,
+	    res0:24;
+};
+
+union ppe_vport_tx_drop_u {
+	u32 val[3];
+	struct ppe_vport_tx_drop_cnt bf;
+};
+
+#define PPE_TPR_PKT_CNT						0x1d0080
+#define PPE_IPR_PKT_CNT						0x1e0080
+#define PPE_IPR_PKT_CNT_NUM					8
+#define PPE_IPR_PKT_CNT_INC					4
+#define PPE_IPR_PKT_CNT_PKT_CNT					GENMASK(31, 0)
+
 #define PPE_TL_SERVICE_TBL					0x306000
 #define PPE_TL_SERVICE_TBL_NUM					256
 #define PPE_TL_SERVICE_TBL_INC					4
@@ -317,6 +553,16 @@ union ppe_ring_q_map_cfg_u {
 #define PPE_BM_PORT_GROUP_ID_NUM				15
 #define PPE_BM_PORT_GROUP_ID_INC				4
 #define PPE_BM_PORT_GROUP_ID_SHARED_GROUP_ID			GENMASK(1, 0)
+
+#define PPE_BM_USED_CNT						0x6001c0
+#define PPE_BM_USED_CNT_NUM					15
+#define PPE_BM_USED_CNT_INC					0x4
+#define PPE_BM_USED_CNT_VAL					GENMASK(10, 0)
+
+#define PPE_BM_REACT_CNT					0x600240
+#define PPE_BM_REACT_CNT_NUM					15
+#define PPE_BM_REACT_CNT_INC					0x4
+#define PPE_BM_REACT_CNT_VAL					GENMASK(8, 0)
 
 #define PPE_BM_SHARED_GROUP_CFG					0x600290
 #define PPE_BM_SHARED_GROUP_CFG_NUM				4
@@ -455,6 +701,16 @@ union ppe_ac_grp_cfg_u {
 	u32 val[3];
 	struct ppe_ac_grp_cfg bf;
 };
+
+#define PPE_AC_UNI_QUEUE_CNT_TBL				0x84e000
+#define PPE_AC_UNI_QUEUE_CNT_TBL_NUM				256
+#define PPE_AC_UNI_QUEUE_CNT_TBL_INC				0x10
+#define PPE_AC_UNI_QUEUE_CNT_TBL_PEND_CNT			GENMASK(12, 0)
+
+#define PPE_AC_MUL_QUEUE_CNT_TBL				0x852000
+#define PPE_AC_MUL_QUEUE_CNT_TBL_NUM				44
+#define PPE_AC_MUL_QUEUE_CNT_TBL_INC				0x10
+#define PPE_AC_MUL_QUEUE_CNT_TBL_PEND_CNT			GENMASK(12, 0)
 
 #define PPE_ENQ_OPR_TBL						0x85c000
 #define PPE_ENQ_OPR_TBL_NUM					300
