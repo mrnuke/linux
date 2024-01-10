@@ -429,6 +429,183 @@ static int ppe_rss_hash_config_set(struct ppe_device *ppe_dev,
 	return 0;
 }
 
+static int ppe_queue_ac_threshold_set(struct ppe_device *ppe_dev,
+				      int queue,
+				      struct ppe_queue_ac_threshold ac_threshold)
+{
+	union ppe_ac_uni_queue_cfg_u uni_queue_cfg;
+
+	if (queue >= PPE_AC_UNI_QUEUE_CFG_TBL_NUM)
+		return -EINVAL;
+
+	memset(&uni_queue_cfg, 0, sizeof(uni_queue_cfg));
+	ppe_read_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+		     PPE_AC_UNI_QUEUE_CFG_TBL_INC * queue,
+		     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+
+	uni_queue_cfg.bf.wred_en = ac_threshold.wred_enable;
+	uni_queue_cfg.bf.color_aware = ac_threshold.color_enable;
+	uni_queue_cfg.bf.shared_dynamic = ac_threshold.dynamic;
+	uni_queue_cfg.bf.shared_weight = ac_threshold.shared_weight;
+	uni_queue_cfg.bf.shared_ceiling = ac_threshold.ceiling;
+	uni_queue_cfg.bf.gap_grn_grn_min = ac_threshold.green_min_off;
+	uni_queue_cfg.bf.gap_grn_yel_max = ac_threshold.yel_max_off;
+	uni_queue_cfg.bf.gap_grn_yel_min_0 = ac_threshold.yel_min_off & 0x3ff;
+	uni_queue_cfg.bf.gap_grn_yel_min_1 = (ac_threshold.yel_min_off >> 10) & BIT(0);
+	uni_queue_cfg.bf.gap_grn_red_max = ac_threshold.red_max_off;
+	uni_queue_cfg.bf.gap_grn_red_min = ac_threshold.red_min_off;
+	uni_queue_cfg.bf.red_resume_0 = ac_threshold.red_resume_off & 0x1ff;
+	uni_queue_cfg.bf.red_resume_1 = ac_threshold.red_resume_off >> 9 & GENMASK(1, 0);
+	uni_queue_cfg.bf.yel_resume = ac_threshold.yel_resume_off;
+	uni_queue_cfg.bf.grn_resume = ac_threshold.green_resume_off;
+
+	return ppe_write_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+			     PPE_AC_UNI_QUEUE_CFG_TBL_INC * queue,
+			     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+}
+
+static int ppe_queue_ac_threshold_get(struct ppe_device *ppe_dev,
+				      int queue,
+				      struct ppe_queue_ac_threshold *ac_threshold)
+{
+	union ppe_ac_uni_queue_cfg_u uni_queue_cfg;
+
+	if (queue >= PPE_AC_UNI_QUEUE_CFG_TBL_NUM)
+		return -EINVAL;
+
+	memset(&uni_queue_cfg, 0, sizeof(uni_queue_cfg));
+	ppe_read_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+		     PPE_AC_UNI_QUEUE_CFG_TBL_INC * queue,
+		     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+
+	ac_threshold->wred_enable = uni_queue_cfg.bf.wred_en;
+	ac_threshold->color_enable = uni_queue_cfg.bf.color_aware;
+	ac_threshold->dynamic = uni_queue_cfg.bf.shared_dynamic;
+	ac_threshold->shared_weight = uni_queue_cfg.bf.shared_weight;
+	ac_threshold->ceiling = uni_queue_cfg.bf.shared_ceiling;
+	ac_threshold->green_min_off = uni_queue_cfg.bf.gap_grn_grn_min;
+	ac_threshold->yel_max_off = uni_queue_cfg.bf.gap_grn_yel_max;
+	ac_threshold->yel_min_off = (uni_queue_cfg.bf.gap_grn_yel_min_0 & 0x3ff) |
+				    (uni_queue_cfg.bf.gap_grn_yel_min_1 << 10 & BIT(0));
+	ac_threshold->red_max_off = uni_queue_cfg.bf.gap_grn_red_max;
+	ac_threshold->red_min_off = uni_queue_cfg.bf.gap_grn_red_min;
+	ac_threshold->red_resume_off = (uni_queue_cfg.bf.red_resume_0 & 0x1ff) |
+				       (uni_queue_cfg.bf.red_resume_1 << 9 & GENMASK(1, 0));
+	ac_threshold->yel_resume_off = uni_queue_cfg.bf.yel_resume;
+	ac_threshold->green_resume_off = uni_queue_cfg.bf.grn_resume;
+
+	return 0;
+}
+
+static int ppe_queue_ac_ctrl_set(struct ppe_device *ppe_dev,
+				 u32 index,
+				 struct ppe_queue_ac_ctrl ac_ctrl)
+{
+	union ppe_ac_uni_queue_cfg_u uni_queue_cfg;
+	union ppe_ac_mul_queue_cfg_u mul_queue_cfg;
+	union ppe_ac_grp_cfg_u	grp_cfg;
+	int ret;
+
+	memset(&grp_cfg, 0, sizeof(grp_cfg));
+	memset(&uni_queue_cfg, 0, sizeof(uni_queue_cfg));
+	memset(&mul_queue_cfg, 0, sizeof(mul_queue_cfg));
+
+	ret = FIELD_GET(PPE_QUEUE_AC_VALUE_MASK, index);
+	if (FIELD_GET(PPE_QUEUE_AC_TYPE_MASK, index) == PPE_QUEUE_AC_TYPE_GROUP) {
+		ppe_read_tbl(ppe_dev, PPE_AC_GRP_CFG_TBL +
+			     PPE_AC_GRP_CFG_TBL_INC * ret,
+			     grp_cfg.val, sizeof(grp_cfg.val));
+
+		grp_cfg.bf.ac_en = ac_ctrl.ac_en;
+		grp_cfg.bf.force_ac_en = ac_ctrl.ac_fc_en;
+
+		ppe_write_tbl(ppe_dev, PPE_AC_GRP_CFG_TBL +
+			      PPE_AC_GRP_CFG_TBL_INC * ret,
+			      grp_cfg.val, sizeof(grp_cfg.val));
+	} else {
+		if (ret > PPE_QUEUE_AC_UCAST_MAX) {
+			ppe_read_tbl(ppe_dev, PPE_AC_MUL_QUEUE_CFG_TBL +
+				     PPE_AC_MUL_QUEUE_CFG_TBL_INC * ret,
+				     mul_queue_cfg.val, sizeof(mul_queue_cfg.val));
+
+			mul_queue_cfg.bf.ac_en = ac_ctrl.ac_en;
+			mul_queue_cfg.bf.force_ac_en = ac_ctrl.ac_fc_en;
+
+			ppe_write_tbl(ppe_dev, PPE_AC_MUL_QUEUE_CFG_TBL +
+				      PPE_AC_MUL_QUEUE_CFG_TBL_INC * ret,
+				      mul_queue_cfg.val, sizeof(mul_queue_cfg.val));
+		} else {
+			ppe_read_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+				     PPE_AC_UNI_QUEUE_CFG_TBL_INC * ret,
+				     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+
+			uni_queue_cfg.bf.ac_en = ac_ctrl.ac_en;
+			uni_queue_cfg.bf.force_ac_en = ac_ctrl.ac_fc_en;
+
+			ppe_write_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+				      PPE_AC_UNI_QUEUE_CFG_TBL_INC * ret,
+				      uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+		}
+	}
+
+	return 0;
+}
+
+static int ppe_queue_ac_ctrl_get(struct ppe_device *ppe_dev,
+				 u32 index,
+				 struct ppe_queue_ac_ctrl *ac_ctrl)
+{
+	union ppe_ac_uni_queue_cfg_u uni_queue_cfg;
+	union ppe_ac_mul_queue_cfg_u mul_queue_cfg;
+	union ppe_ac_grp_cfg_u	grp_cfg;
+	int ret;
+
+	memset(&grp_cfg, 0, sizeof(grp_cfg));
+	memset(&uni_queue_cfg, 0, sizeof(uni_queue_cfg));
+	memset(&mul_queue_cfg, 0, sizeof(mul_queue_cfg));
+
+	ret = FIELD_GET(PPE_QUEUE_AC_VALUE_MASK, index);
+	if (FIELD_GET(PPE_QUEUE_AC_TYPE_MASK, index) == PPE_QUEUE_AC_TYPE_GROUP) {
+		ppe_read_tbl(ppe_dev, PPE_AC_GRP_CFG_TBL +
+			     PPE_AC_GRP_CFG_TBL_INC * ret,
+			     grp_cfg.val, sizeof(grp_cfg.val));
+
+		ac_ctrl->ac_en = grp_cfg.bf.ac_en;
+		ac_ctrl->ac_fc_en = grp_cfg.bf.force_ac_en;
+	} else {
+		if (ret > PPE_QUEUE_AC_UCAST_MAX) {
+			ppe_read_tbl(ppe_dev, PPE_AC_MUL_QUEUE_CFG_TBL +
+				     PPE_AC_MUL_QUEUE_CFG_TBL_INC * ret,
+				     mul_queue_cfg.val, sizeof(mul_queue_cfg.val));
+
+			ac_ctrl->ac_en = mul_queue_cfg.bf.ac_en;
+			ac_ctrl->ac_fc_en = mul_queue_cfg.bf.force_ac_en;
+		} else {
+			ppe_read_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+				     PPE_AC_UNI_QUEUE_CFG_TBL_INC * ret,
+				     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+
+			ac_ctrl->ac_en = uni_queue_cfg.bf.ac_en;
+			ac_ctrl->ac_fc_en = uni_queue_cfg.bf.force_ac_en;
+		}
+	}
+
+	return 0;
+}
+
+static int ppe_ring_queue_map_set(struct ppe_device *ppe_dev,
+				  int ring_id,
+				  u32 *queue_map)
+{
+	union ppe_ring_q_map_cfg_u ring_q_map;
+
+	memset(&ring_q_map, 0, sizeof(ring_q_map));
+
+	memcpy(ring_q_map.val, queue_map, sizeof(ring_q_map.val));
+	return ppe_write_tbl(ppe_dev, PPE_RING_Q_MAP_TBL + PPE_RING_Q_MAP_TBL_INC * ring_id,
+			     ring_q_map.val, sizeof(ring_q_map.val));
+}
+
 static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_scheduler_set = ppe_queue_scheduler_set,
 	.queue_scheduler_get = ppe_queue_scheduler_get,
@@ -437,6 +614,11 @@ static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_ucast_pri_class_set = ppe_queue_ucast_pri_class_set,
 	.queue_ucast_hash_class_set = ppe_queue_ucast_hash_class_set,
 	.rss_hash_config_set = ppe_rss_hash_config_set,
+	.queue_ac_threshold_set = ppe_queue_ac_threshold_set,
+	.queue_ac_threshold_get = ppe_queue_ac_threshold_get,
+	.queue_ac_ctrl_set = ppe_queue_ac_ctrl_set,
+	.queue_ac_ctrl_get = ppe_queue_ac_ctrl_get,
+	.ring_queue_map_set = ppe_ring_queue_map_set,
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void)

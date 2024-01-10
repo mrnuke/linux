@@ -238,6 +238,30 @@ union ppe_mru_mtu_ctrl_cfg_u {
 #define PPE_L0_COMP_CFG_TBL_SHAPER_METER_LEN			GENMASK(1, 0)
 #define PPE_L0_COMP_CFG_TBL_DRR_METER_LEN			GENMASK(3, 2)
 
+#define PPE_RING_Q_MAP_TBL					0x42a000
+#define PPE_RING_Q_MAP_TBL_NUM					24
+#define PPE_RING_Q_MAP_TBL_INC					0x40
+
+/* The queue bitmap for the back pressure from EDAM RX ring to PPE queue */
+struct ppe_ring_q_map_cfg {
+	u32 queue_bitmap_0;
+	u32 queue_bitmap_1;
+	u32 queue_bitmap_2;
+	u32 queue_bitmap_3;
+	u32 queue_bitmap_4;
+	u32 queue_bitmap_5;
+	u32 queue_bitmap_6;
+	u32 queue_bitmap_7;
+	u32 queue_bitmap_8;
+	u32 queue_bitmap_9:12,
+	    res0:20;
+};
+
+union ppe_ring_q_map_cfg_u {
+	u32 val[10];
+	struct ppe_ring_q_map_cfg bf;
+};
+
 #define PPE_DEQ_OPR_TBL						0x430000
 #define PPE_DEQ_OPR_TBL_NUM					300
 #define PPE_DEQ_OPR_TBL_INC					0x10

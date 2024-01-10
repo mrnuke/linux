@@ -14,6 +14,12 @@
 #define PPE_QUEUE_HASH_MAX		256
 #define PPE_RSS_HASH_MODE_IPV4		BIT(0)
 #define PPE_RSS_HASH_MODE_IPV6		BIT(1)
+#define PPE_QUEUE_AC_TYPE_QUEUE			0
+#define PPE_QUEUE_AC_TYPE_GROUP			1
+#define PPE_QUEUE_AC_UCAST_MAX			255
+#define PPE_QUEUE_AC_VALUE_MASK			GENMASK(23, 0)
+#define PPE_QUEUE_AC_TYPE_MASK			GENMASK(31, 24)
+#define PPE_RING_MAPPED_BP_QUEUE_WORD_COUNT	10
 
 /* PPE hardware QoS configurations used to dispatch the packet passed
  * through PPE, the scheduler supports DRR(deficit round robin with the
@@ -167,6 +173,32 @@ struct ppe_rss_hash_cfg {
 	u8 hash_fin_outer[5];
 };
 
+/* PPE queue threshold config for the admission control, the threshold
+ * decides the length of queue, the threshold can be configured statically
+ * or dynamically changed with the free buffer.
+ */
+struct ppe_queue_ac_threshold {
+	bool color_enable;
+	bool wred_enable;
+	bool dynamic;
+	int shared_weight;
+	int green_min_off;
+	int yel_max_off;
+	int yel_min_off;
+	int red_max_off;
+	int red_min_off;
+	int green_resume_off;
+	int yel_resume_off;
+	int red_resume_off;
+	int ceiling;
+};
+
+/* Admission control status of PPE queue. */
+struct ppe_queue_ac_ctrl {
+	bool ac_en;
+	bool ac_fc_en;
+};
+
 /* The operations are used to configure the PPE queue related resource */
 struct ppe_queue_ops {
 	int (*queue_scheduler_set)(struct ppe_device *ppe_dev,
@@ -198,6 +230,21 @@ struct ppe_queue_ops {
 	int (*rss_hash_config_set)(struct ppe_device *ppe_dev,
 				   int mode,
 				   struct ppe_rss_hash_cfg hash_cfg);
+	int (*queue_ac_threshold_set)(struct ppe_device *ppe_dev,
+				      int queue,
+				      struct ppe_queue_ac_threshold ac_threshold);
+	int (*queue_ac_threshold_get)(struct ppe_device *ppe_dev,
+				      int queue,
+				      struct ppe_queue_ac_threshold *ac_threshold);
+	int (*queue_ac_ctrl_set)(struct ppe_device *ppe_dev,
+				 u32 index,
+				 struct ppe_queue_ac_ctrl ac_ctrl);
+	int (*queue_ac_ctrl_get)(struct ppe_device *ppe_dev,
+				 u32 index,
+				 struct ppe_queue_ac_ctrl *ac_ctrl);
+	int (*ring_queue_map_set)(struct ppe_device *ppe_dev,
+				  int ring_id,
+				  u32 *queue_map);
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void);
