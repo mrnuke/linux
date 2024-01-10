@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/soc/qcom/ppe.h>
 #include "ppe.h"
+#include "ppe_regs.h"
 
 static const char * const ppe_clock_name[PPE_CLK_MAX] = {
 	"cmn_ahb",
@@ -110,6 +111,49 @@ static const char * const ppe_reset_name[PPE_RST_MAX] = {
 	"nss_port5_mac",
 	"nss_port6_mac",
 };
+
+int ppe_write(struct ppe_device *ppe_dev, u32 reg, unsigned int val)
+{
+	return regmap_write(ppe_dev->regmap, reg, val);
+}
+
+int ppe_read(struct ppe_device *ppe_dev, u32 reg, unsigned int *val)
+{
+	return regmap_read(ppe_dev->regmap, reg, val);
+}
+
+int ppe_mask(struct ppe_device *ppe_dev, u32 reg, u32 mask, unsigned int set)
+{
+	return regmap_update_bits(ppe_dev->regmap, reg, mask, set);
+}
+
+int ppe_write_tbl(struct ppe_device *ppe_dev, u32 reg,
+		  const unsigned int *val, int cnt)
+{
+	int i, ret;
+
+	for (i = 0; i < cnt / 4; i++) {
+		ret = ppe_write(ppe_dev, reg + i * 4, val[i]);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+int ppe_read_tbl(struct ppe_device *ppe_dev, u32 reg,
+		 unsigned int *val, int cnt)
+{
+	int i, ret;
+
+	for (i = 0; i < cnt / 4; i++) {
+		ret = ppe_read(ppe_dev, reg + i * 4, &val[i]);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
 
 int ppe_type_get(struct ppe_device *ppe_dev)
 {
@@ -323,6 +367,120 @@ static struct ppe_data *ppe_data_init(struct platform_device *pdev)
 	return ppe_dev_priv;
 }
 
+static int of_parse_ppe_bm(struct ppe_device *ppe_dev,
+			   struct device_node *ppe_node)
+{
+	union ppe_bm_port_fc_cfg_u fc_cfg;
+	struct device_node *bm_node;
+	int ret, cnt;
+	u32 *cfg, reg_val;
+
+	bm_node = of_get_child_by_name(ppe_node, "buffer-management-config");
+	if (!bm_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get buffer-management-config\n");
+
+	cnt = of_property_count_u32_elems(bm_node, "qcom,group-config");
+	if (cnt < 0)
+		return dev_err_probe(ppe_dev->dev, cnt,
+				     "Fail to qcom,group-config\n");
+
+	cfg = kmalloc_array(cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(bm_node, "qcom,group-config", cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,group-config %d\n", ret);
+		goto parse_bm_err;
+	}
+
+	/* Parse BM group configuration,
+	 * the dts propert: qcom,group-config = <group group_buf>;
+	 *
+	 * There are 3 kinds of buffer types, guaranteed buffer(port based),
+	 * shared buffer(group based) and react buffer(cache in-flight packets).
+	 *
+	 * Maximum 4 groups supported by PPE.
+	 */
+	ret = 0;
+	while ((cnt - ret) / 2) {
+		if (cfg[ret] < PPE_BM_SHARED_GROUP_CFG_NUM) {
+			reg_val = FIELD_PREP(PPE_BM_SHARED_GROUP_CFG_SHARED_LIMIT, cfg[ret + 1]);
+
+			ppe_write(ppe_dev, PPE_BM_SHARED_GROUP_CFG +
+				  PPE_BM_SHARED_GROUP_CFG_INC * cfg[ret], reg_val);
+		}
+		ret += 2;
+	}
+
+	cnt = of_property_count_u32_elems(bm_node, "qcom,port-config");
+	if (cnt < 0) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,port-config %d\n", cnt);
+		goto parse_bm_err;
+	}
+
+	cfg = krealloc_array(cfg, cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg) {
+		ret = -ENOMEM;
+		goto parse_bm_err;
+	}
+
+	ret = of_property_read_u32_array(bm_node, "qcom,port-config", cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,port-config %d\n", ret);
+		goto parse_bm_err;
+	}
+
+	/* Parse BM port configuration,
+	 * the dts property: qcom,port-config = <group port prealloc react ceil
+	 * weight res_off res_ceil dynamic>;
+	 *
+	 * The port based buffer is assigned to the group ID, which is the
+	 * buffer dedicated to BM port, and the threshold to generate the
+	 * pause frame, the threshold can be configured as the static value
+	 * or dynamically adjusted according to the remain buffer.
+	 */
+	ret = 0;
+	while ((cnt - ret) / 9) {
+		if (cfg[ret + 1] < PPE_BM_PORT_FC_MODE_NUM) {
+			memset(&fc_cfg, 0, sizeof(fc_cfg));
+
+			fc_cfg.bf.pre_alloc = cfg[ret + 2];
+			fc_cfg.bf.react_limit = cfg[ret + 3];
+			fc_cfg.bf.shared_ceiling_0 = cfg[ret + 4] & 0x7;
+			fc_cfg.bf.shared_ceiling_1 = cfg[ret + 4] >> 3;
+			fc_cfg.bf.shared_weight = cfg[ret + 5];
+			fc_cfg.bf.resum_offset = cfg[ret + 6];
+			fc_cfg.bf.resum_floor_th = cfg[ret + 7];
+			fc_cfg.bf.shared_dynamic = cfg[ret + 8];
+			ppe_write_tbl(ppe_dev, PPE_BM_PORT_FC_CFG +
+				      PPE_BM_PORT_FC_CFG_INC * cfg[ret + 1],
+				      fc_cfg.val, sizeof(fc_cfg.val));
+
+			reg_val = FIELD_PREP(PPE_BM_PORT_GROUP_ID_SHARED_GROUP_ID, cfg[ret]);
+			ppe_write(ppe_dev, PPE_BM_PORT_GROUP_ID +
+				  PPE_BM_PORT_GROUP_ID_INC * cfg[ret + 1], reg_val);
+
+			reg_val = FIELD_PREP(PPE_BM_PORT_FC_MODE_EN, 1);
+			ppe_write(ppe_dev, PPE_BM_PORT_FC_MODE +
+				  PPE_BM_PORT_FC_MODE_INC * cfg[ret + 1], reg_val);
+		}
+		ret += 9;
+	}
+	ret = 0;
+
+parse_bm_err:
+	kfree(cfg);
+	return ret;
+}
+
+static int of_parse_ppe_config(struct ppe_device *ppe_dev,
+			       struct device_node *ppe_node)
+{
+	return of_parse_ppe_bm(ppe_dev, ppe_node);
+}
+
 static int qcom_ppe_probe(struct platform_device *pdev)
 {
 	struct ppe_device *ppe_dev;
@@ -358,6 +516,12 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev,
 				     ret,
 				     "ppe clock config failed\n");
+
+	ret = of_parse_ppe_config(ppe_dev, pdev->dev.of_node);
+	if (ret)
+		return dev_err_probe(&pdev->dev,
+				     ret,
+				     "of parse ppe failed\n");
 
 	ppe_dev->is_ppe_probed = true;
 	return 0;
