@@ -21,6 +21,9 @@
 #define PPE_PORT6		6
 #define PPE_PORT7		7
 
+/* PPE Port XO Clock Rate */
+#define P_XO_CLOCK_RATE		24000000
+
 enum ppe_clk_id {
 	/* clocks for CMN PLL */
 	PPE_CMN_AHB_CLK,
@@ -152,6 +155,14 @@ enum {
 	PPE_ACTION_REDIRECTED_TO_CPU
 };
 
+/* PPE MAC Type */
+enum {
+	PPE_MAC_TYPE_NA,
+	PPE_MAC_TYPE_GMAC,
+	PPE_MAC_TYPE_XGMAC,
+	PPE_MAC_TYPE_MAX
+};
+
 /* PPE private data of different PPE type device */
 struct ppe_data {
 	int ppe_type;
@@ -170,6 +181,28 @@ struct ppe_scheduler_port_resource {
 	int l0edrr[2];
 	int l1cdrr[2];
 	int l1edrr[2];
+};
+
+/* PPE per port data type to record port settings such as phylink
+ * setting, mac type, interface mode and link speed.
+ */
+struct ppe_port {
+	struct phylink *phylink;
+	struct phylink_config phylink_config;
+	struct device_node *np;
+	struct ppe_device *ppe_dev;
+	phy_interface_t interface;
+	int mac_type;
+	int port_id;
+	int speed;
+	int duplex;
+	int pause;
+};
+
+/* PPE ports data type */
+struct ppe_ports {
+	unsigned int num;
+	struct ppe_port port[];
 };
 
 int ppe_type_get(struct ppe_device *ppe_dev);
