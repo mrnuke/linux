@@ -16,6 +16,7 @@
 #include "ppe.h"
 #include "ppe_regs.h"
 
+#define PPE_SCHEDULER_PORT_NUM		8
 static const char * const ppe_clock_name[PPE_CLK_MAX] = {
 	"cmn_ahb",
 	"cmn_sys",
@@ -111,6 +112,8 @@ static const char * const ppe_reset_name[PPE_RST_MAX] = {
 	"nss_port5_mac",
 	"nss_port6_mac",
 };
+
+static struct ppe_scheduler_port_resource ppe_scheduler_res[PPE_SCHEDULER_PORT_NUM];
 
 int ppe_write(struct ppe_device *ppe_dev, u32 reg, unsigned int val)
 {
@@ -730,6 +733,80 @@ parse_tdm_err:
 	return ret;
 };
 
+static int of_parse_ppe_scheduler_resource(struct ppe_device *ppe_dev,
+					   struct device_node *resource_node)
+{
+	struct device_node *port_node;
+	u32 port;
+
+	for_each_available_child_of_node(resource_node, port_node) {
+		if (of_property_read_u32(port_node, "port-id", &port))
+			return dev_err_probe(ppe_dev->dev, -ENODEV,
+					     "port-id not defined on resource\n");
+
+		if (port >= ARRAY_SIZE(ppe_scheduler_res))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid port-id defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,ucast-queue",
+					       ppe_scheduler_res[port].ucastq,
+					       ARRAY_SIZE(ppe_scheduler_res[port].ucastq)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,ucast-queue defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,mcast-queue",
+					       ppe_scheduler_res[port].mcastq,
+					       ARRAY_SIZE(ppe_scheduler_res[port].mcastq)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,mcast-queue defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,l0sp",
+					       ppe_scheduler_res[port].l0sp,
+					       ARRAY_SIZE(ppe_scheduler_res[port].l0sp)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,l0sp defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,l0cdrr",
+					       ppe_scheduler_res[port].l0cdrr,
+					       ARRAY_SIZE(ppe_scheduler_res[port].l0cdrr)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,l0cdrr defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,l0edrr",
+					       ppe_scheduler_res[port].l0edrr,
+					       ARRAY_SIZE(ppe_scheduler_res[port].l0edrr)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,l0edrr defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,l1cdrr",
+					       ppe_scheduler_res[port].l1cdrr,
+					       ARRAY_SIZE(ppe_scheduler_res[port].l1cdrr)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,l1cdrr defined on resource\n");
+
+		if (of_property_read_u32_array(port_node, "qcom,l1edrr",
+					       ppe_scheduler_res[port].l1edrr,
+					       ARRAY_SIZE(ppe_scheduler_res[port].l1edrr)))
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					     "Invalid qcom,l1edrr defined on resource\n");
+	}
+
+	return 0;
+}
+
+static int of_parse_ppe_scheduler(struct ppe_device *ppe_dev,
+				  struct device_node *ppe_node)
+{
+	struct device_node *scheduler_node;
+
+	scheduler_node = of_get_child_by_name(ppe_node, "port-scheduler-resource");
+	if (!scheduler_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "port-scheduler-resource is not defined\n");
+
+	return of_parse_ppe_scheduler_resource(ppe_dev, scheduler_node);
+}
+
 static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 			       struct device_node *ppe_node)
 {
@@ -743,7 +820,11 @@ static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 	if (ret)
 		return ret;
 
-	return of_parse_ppe_tdm(ppe_dev, ppe_node);
+	ret = of_parse_ppe_tdm(ppe_dev, ppe_node);
+	if (ret)
+		return ret;
+
+	return of_parse_ppe_scheduler(ppe_dev, ppe_node);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
