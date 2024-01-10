@@ -475,10 +475,166 @@ parse_bm_err:
 	return ret;
 }
 
+static int of_parse_ppe_qm(struct ppe_device *ppe_dev,
+			   struct device_node *ppe_node)
+{
+	union ppe_ac_uni_queue_cfg_u uni_queue_cfg;
+	union ppe_ac_mul_queue_cfg_u mul_queue_cfg;
+	union ppe_ac_grp_cfg_u group_cfg;
+	struct device_node *qm_node;
+	int ret, cnt, queue_id;
+	u32 *cfg;
+
+	qm_node = of_get_child_by_name(ppe_node, "queue-management-config");
+	if (!qm_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get queue-management-config\n");
+
+	cnt = of_property_count_u32_elems(qm_node, "qcom,group-config");
+	if (cnt < 0)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get qcom,group-config\n");
+
+	cfg = kmalloc_array(cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(qm_node, "qcom,group-config", cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,group-config\n");
+		goto parse_qm_err;
+	}
+
+	/* Parse QM group config:
+	 * qcom,group-config = <group total prealloc ceil resume_off>;
+	 *
+	 * For packet enqueue, there are two kinds of buffer type available,
+	 * queue based buffer and group(shared) buffer, the queue based buffer
+	 * is used firstly, then shared buffer used.
+	 *
+	 * Maximum 4 groups buffer supported by PPE.
+	 */
+	ret = 0;
+	while ((cnt - ret) / 5) {
+		memset(&group_cfg, 0, sizeof(group_cfg));
+
+		ppe_read_tbl(ppe_dev, PPE_AC_GRP_CFG_TBL +
+			     PPE_AC_GRP_CFG_TBL_INC * cfg[ret],
+			     group_cfg.val, sizeof(group_cfg.val));
+
+		group_cfg.bf.limit = cfg[ret + 1];
+		group_cfg.bf.prealloc_limit = cfg[ret + 2];
+		group_cfg.bf.dp_thrd_0 = cfg[ret + 3] & 0x3f;
+		group_cfg.bf.dp_thrd_1 = cfg[ret + 3] >> 7;
+		group_cfg.bf.grn_resume = cfg[ret + 4];
+
+		ppe_write_tbl(ppe_dev, PPE_AC_GRP_CFG_TBL +
+			      PPE_AC_GRP_CFG_TBL_INC * cfg[ret],
+			      group_cfg.val, sizeof(group_cfg.val));
+		ret += 5;
+	}
+
+	cnt = of_property_count_u32_elems(qm_node, "qcom,queue-config");
+	if (cnt < 0) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,queue-config\n");
+		goto parse_qm_err;
+	}
+
+	cfg = krealloc_array(cfg, cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg) {
+		ret = -ENOMEM;
+		goto parse_qm_err;
+	}
+
+	ret = of_property_read_u32_array(qm_node, "qcom,queue-config", cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,queue-config\n");
+		goto parse_qm_err;
+	}
+
+	/* Parse queue based config:
+	 * qcom,queue-config = <queue_base queue_num group prealloc
+	 * ceil weight resume_off dynamic>;
+	 *
+	 * There are totally 256(queue id 0-255) unicast queues and 44(256-299)
+	 * multicast queues available in PPE, each queue is assigned the
+	 * dedicated buffer and ceil to drop packet, the unicast queue supports
+	 * static configured ceil value and dynamic ceil value that is adjusted
+	 * according to the available group buffers, multicast queue only supports
+	 * static ceil.
+	 */
+	ret = 0;
+	while ((cnt - ret) / 8) {
+		queue_id = 0;
+		while (queue_id < cfg[ret + 1]) {
+			if (cfg[ret] + queue_id < PPE_AC_UNI_QUEUE_CFG_TBL_NUM) {
+				memset(&uni_queue_cfg, 0, sizeof(uni_queue_cfg));
+
+				ppe_read_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+					     PPE_AC_UNI_QUEUE_CFG_TBL_INC * (cfg[ret] + queue_id),
+					     uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+
+				uni_queue_cfg.bf.ac_grp_id = cfg[ret + 2];
+				uni_queue_cfg.bf.prealloc_limit = cfg[ret + 3];
+				uni_queue_cfg.bf.shared_ceiling = cfg[ret + 4];
+				uni_queue_cfg.bf.shared_weight = cfg[ret + 5];
+				uni_queue_cfg.bf.grn_resume = cfg[ret + 6];
+				uni_queue_cfg.bf.shared_dynamic = cfg[ret + 7];
+				uni_queue_cfg.bf.ac_en = 1;
+
+				ppe_write_tbl(ppe_dev, PPE_AC_UNI_QUEUE_CFG_TBL +
+					      PPE_AC_UNI_QUEUE_CFG_TBL_INC * (cfg[ret] + queue_id),
+					      uni_queue_cfg.val, sizeof(uni_queue_cfg.val));
+			} else {
+				memset(&mul_queue_cfg, 0, sizeof(mul_queue_cfg));
+
+				ppe_read_tbl(ppe_dev, PPE_AC_MUL_QUEUE_CFG_TBL +
+					     PPE_AC_MUL_QUEUE_CFG_TBL_INC * (cfg[ret] + queue_id),
+					     mul_queue_cfg.val, sizeof(mul_queue_cfg.val));
+
+				mul_queue_cfg.bf.ac_grp_id = cfg[ret + 2];
+				mul_queue_cfg.bf.prealloc_limit = cfg[ret + 3];
+				mul_queue_cfg.bf.shared_ceiling = cfg[ret + 4];
+				mul_queue_cfg.bf.grn_resume = cfg[ret + 6];
+				mul_queue_cfg.bf.ac_en = 1;
+
+				ppe_write_tbl(ppe_dev, PPE_AC_MUL_QUEUE_CFG_TBL +
+					      PPE_AC_MUL_QUEUE_CFG_TBL_INC * (cfg[ret] + queue_id),
+					      mul_queue_cfg.val, sizeof(mul_queue_cfg.val));
+			}
+
+			ppe_mask(ppe_dev, PPE_ENQ_OPR_TBL +
+				 PPE_ENQ_OPR_TBL_INC * (cfg[ret] + queue_id),
+				 PPE_ENQ_OPR_TBL_DEQ_DISABLE, 0);
+
+			ppe_mask(ppe_dev, PPE_DEQ_OPR_TBL +
+				 PPE_DEQ_OPR_TBL_INC * (cfg[ret] + queue_id),
+				 PPE_ENQ_OPR_TBL_DEQ_DISABLE, 0);
+
+			queue_id++;
+		}
+		ret += 8;
+	}
+
+	/* Enable queue counter */
+	ret = ppe_mask(ppe_dev, PPE_EG_BRIDGE_CONFIG,
+		       PPE_EG_BRIDGE_CONFIG_QUEUE_CNT_EN,
+		       PPE_EG_BRIDGE_CONFIG_QUEUE_CNT_EN);
+parse_qm_err:
+	kfree(cfg);
+	return ret;
+}
+
 static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 			       struct device_node *ppe_node)
 {
-	return of_parse_ppe_bm(ppe_dev, ppe_node);
+	int ret;
+
+	ret = of_parse_ppe_bm(ppe_dev, ppe_node);
+	if (ret)
+		return ret;
+
+	return of_parse_ppe_qm(ppe_dev, ppe_node);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
