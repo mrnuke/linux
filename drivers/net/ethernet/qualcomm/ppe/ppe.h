@@ -139,6 +139,19 @@ struct ppe_data {
 	struct reset_control *rst[PPE_RST_MAX];
 };
 
+/* PPE port QoS resource, which includes the queue range and
+ * DRR(deficit round robin), SP(strict priority).
+ */
+struct ppe_scheduler_port_resource {
+	int ucastq[2];
+	int mcastq[2];
+	int l0sp[2];
+	int l0cdrr[2];
+	int l0edrr[2];
+	int l1cdrr[2];
+	int l1edrr[2];
+};
+
 int ppe_type_get(struct ppe_device *ppe_dev);
 
 int ppe_write(struct ppe_device *ppe_dev, u32 reg, unsigned int val);
