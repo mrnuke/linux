@@ -15,8 +15,13 @@
 #include <linux/soc/qcom/ppe.h>
 #include "ppe.h"
 #include "ppe_regs.h"
+#include "ppe_ops.h"
 
 #define PPE_SCHEDULER_PORT_NUM		8
+#define PPE_SCHEDULER_L0_NUM		300
+#define PPE_SCHEDULER_L1_NUM		64
+#define PPE_SP_PRIORITY_NUM		8
+
 static const char * const ppe_clock_name[PPE_CLK_MAX] = {
 	"cmn_ahb",
 	"cmn_sys",
@@ -794,17 +799,202 @@ static int of_parse_ppe_scheduler_resource(struct ppe_device *ppe_dev,
 	return 0;
 }
 
+static int of_parse_ppe_scheduler_group_config(struct ppe_device *ppe_dev,
+					       struct device_node *group_node,
+					       int port,
+					       const char *node_name,
+					       const char *loop_name)
+{
+	struct ppe_qos_scheduler_cfg qos_cfg;
+	const struct ppe_queue_ops *ppe_queue_ops;
+	const __be32 *paddr;
+	int ret, len, i, node_id, level, node_max;
+	u32 tmp_cfg[5], pri_loop, max_pri;
+
+	ppe_queue_ops = ppe_queue_config_ops_get();
+	if (!ppe_queue_ops->queue_scheduler_set)
+		return -EINVAL;
+
+	/* The value of the property node_name can be single value
+	 * or array value.
+	 *
+	 * If the array value is defined, the property loop_name should not
+	 * be specified.
+	 *
+	 * If the single value is defined, the queue ID will be added in the
+	 * loop value defined by the loop_name.
+	 */
+	paddr = of_get_property(group_node, node_name, &len);
+	if (!paddr)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get queue %s of port %d\n",
+				     node_name, port);
+
+	len /= sizeof(u32);
+
+	/* There are two levels scheduler configs, the level 0 scheduler
+	 * config is configured on the queue, the level 1 scheduler is
+	 * configured on the flow that is from the output of level 0
+	 * scheduler.
+	 */
+	if (!strcmp(node_name, "qcom,flow")) {
+		level = 1;
+		node_max = PPE_SCHEDULER_L1_NUM;
+	} else {
+		level = 0;
+		node_max = PPE_SCHEDULER_L0_NUM;
+	}
+
+	if (of_property_read_u32_array(group_node, "qcom,scheduler-config",
+				       tmp_cfg, ARRAY_SIZE(tmp_cfg)))
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get qcom,scheduler-config of port %d\n",
+				     port);
+
+	if (of_property_read_u32(group_node, loop_name, &pri_loop)) {
+		for (i = 0; i < len; i++) {
+			node_id = be32_to_cpup(paddr + i);
+			if (node_id >= node_max)
+				return dev_err_probe(ppe_dev->dev, -EINVAL,
+						     "Invalid node ID %d of port %d\n",
+						     node_id, port);
+
+			memset(&qos_cfg, 0, sizeof(qos_cfg));
+
+			qos_cfg.sp_id = tmp_cfg[0];
+			qos_cfg.c_pri = tmp_cfg[1];
+			qos_cfg.c_drr_id = tmp_cfg[2];
+			qos_cfg.e_pri = tmp_cfg[3];
+			qos_cfg.e_drr_id = tmp_cfg[4];
+			qos_cfg.c_drr_wt = 1;
+			qos_cfg.e_drr_wt = 1;
+			ret = ppe_queue_ops->queue_scheduler_set(ppe_dev,
+								 node_id,
+								 level,
+								 port,
+								 qos_cfg);
+			if (ret)
+				return dev_err_probe(ppe_dev->dev, ret,
+						     "scheduler set fail on node ID %d\n",
+						     node_id);
+		}
+	} else {
+		/* Only one base node ID allowed to loop. */
+		if (len != 1)
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					"Multiple node ID defined to loop for port %d\n",
+					port);
+
+		/* Property qcom,drr-max-priority is optional for loop,
+		 * if not defined, the default value PPE_SP_PRIORITY_NUM
+		 * is used.
+		 */
+		max_pri = PPE_SP_PRIORITY_NUM;
+		of_property_read_u32(group_node, "qcom,drr-max-priority", &max_pri);
+
+		node_id = be32_to_cpup(paddr);
+		if (node_id >= node_max)
+			return dev_err_probe(ppe_dev->dev, -EINVAL,
+					"Invalid node ID %d defined to loop for port %d\n",
+					node_id, port);
+
+		for (i = 0; i < pri_loop; i++) {
+			memset(&qos_cfg, 0, sizeof(qos_cfg));
+
+			qos_cfg.sp_id = tmp_cfg[0] + i / max_pri;
+			qos_cfg.c_pri = tmp_cfg[1] + i % max_pri;
+			qos_cfg.c_drr_id = tmp_cfg[2] + i;
+			qos_cfg.e_pri = tmp_cfg[3] + i % max_pri;
+			qos_cfg.e_drr_id = tmp_cfg[4] + i;
+			qos_cfg.c_drr_wt = 1;
+			qos_cfg.e_drr_wt = 1;
+			ret = ppe_queue_ops->queue_scheduler_set(ppe_dev,
+								 node_id + i,
+								 level,
+								 port,
+								 qos_cfg);
+			if (ret)
+				return dev_err_probe(ppe_dev->dev, ret,
+						     "scheduler set fail on node ID %d\n",
+						     node_id + i);
+		}
+	}
+
+	return 0;
+}
+
+static int of_parse_ppe_scheduler_config(struct ppe_device *ppe_dev,
+					 struct device_node *port_node)
+{
+	struct device_node *scheduler_node, *child;
+	int port, ret;
+
+	if (of_property_read_u32(port_node, "port-id", &port))
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get port-id of l0scheduler\n");
+
+	scheduler_node = of_get_child_by_name(port_node, "l0scheduler");
+	if (!scheduler_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get l0scheduler config\n");
+
+	for_each_available_child_of_node(scheduler_node, child) {
+		ret = of_parse_ppe_scheduler_group_config(ppe_dev, child, port,
+							  "qcom,ucast-queue",
+							  "qcom,ucast-loop-priority");
+		if (ret)
+			return ret;
+
+		ret = of_parse_ppe_scheduler_group_config(ppe_dev, child, port,
+							  "qcom,mcast-queue",
+							  "qcom,mcast-loop-priority");
+		if (ret)
+			return ret;
+	}
+
+	scheduler_node = of_get_child_by_name(port_node, "l1scheduler");
+	if (!scheduler_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "Fail to get l1scheduler config\n");
+
+	for_each_available_child_of_node(scheduler_node, child) {
+		ret = of_parse_ppe_scheduler_group_config(ppe_dev, child, port,
+							  "qcom,flow",
+							  "qcom,flow-loop-priority");
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
 static int of_parse_ppe_scheduler(struct ppe_device *ppe_dev,
 				  struct device_node *ppe_node)
 {
-	struct device_node *scheduler_node;
+	struct device_node *scheduler_node, *port_node;
+	int ret;
 
 	scheduler_node = of_get_child_by_name(ppe_node, "port-scheduler-resource");
 	if (!scheduler_node)
 		return dev_err_probe(ppe_dev->dev, -ENODEV,
 				     "port-scheduler-resource is not defined\n");
 
-	return of_parse_ppe_scheduler_resource(ppe_dev, scheduler_node);
+	ret = of_parse_ppe_scheduler_resource(ppe_dev, scheduler_node);
+	if (ret)
+		return ret;
+
+	scheduler_node = of_get_child_by_name(ppe_node, "port-scheduler-config");
+	if (!scheduler_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "port-scheduler-config is not defined\n");
+
+	for_each_available_child_of_node(scheduler_node, port_node) {
+		ret = of_parse_ppe_scheduler_config(ppe_dev, port_node);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
 }
 
 static int of_parse_ppe_config(struct ppe_device *ppe_dev,
