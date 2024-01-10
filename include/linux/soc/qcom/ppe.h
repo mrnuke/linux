@@ -10,6 +10,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/phylink.h>
+#include <linux/if_link.h>
 
 /* PPE platform private data, which is used by external driver like
  * Ethernet DMA driver.
@@ -57,6 +58,35 @@ struct ppe_device_ops {
 	struct phylink_pcs *(*phylink_mac_select_pcs)(struct ppe_device *ppe_dev,
 						      int port,
 						      phy_interface_t interface);
+	/*
+	 * Port statistics counters
+	 */
+	void	(*get_stats64)(struct ppe_device *ppe_dev,
+			       int port,
+			       struct rtnl_link_stats64 *s);
+	void	(*get_strings)(struct ppe_device *ppe_dev,
+			       int port,
+			       u32 stringset,
+			       u8 *data);
+	int	(*get_sset_count)(struct ppe_device *ppe_dev,
+				  int port,
+				  int sset);
+	void	(*get_ethtool_stats)(struct ppe_device *ppe_dev,
+				     int port,
+				     u64 *data);
+	/*
+	 * Port MAC address setting
+	 */
+	int	(*set_mac_address)(struct ppe_device *ppe_dev,
+				   int port,
+				   u8 *macaddr);
+	/*
+	 * Port MAC EEE settings
+	 */
+	int	(*set_mac_eee)(struct ppe_device *ppe_dev, int port,
+			       struct ethtool_eee *eee);
+	int	(*get_mac_eee)(struct ppe_device *ppe_dev, int port,
+			       struct ethtool_eee *eee);
 	/*
 	 * Port maximum frame size setting
 	 */
