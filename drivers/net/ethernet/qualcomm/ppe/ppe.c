@@ -18,6 +18,7 @@
 #include "ppe_ops.h"
 
 #define PPE_SCHEDULER_PORT_NUM		8
+#define MPPE_SCHEDULER_PORT_NUM		3
 #define PPE_SCHEDULER_L0_NUM		300
 #define PPE_SCHEDULER_L1_NUM		64
 #define PPE_SP_PRIORITY_NUM		8
@@ -1118,6 +1119,59 @@ static int ppe_servcode_init(struct ppe_device *ppe_dev)
 	return ppe_servcode_config_set(ppe_dev, 1, servcode_cfg);
 }
 
+static int ppe_port_ctrl_init(struct ppe_device *ppe_dev)
+{
+	union ppe_mru_mtu_ctrl_cfg_u mru_mtu_cfg;
+	int ret, port_num = PPE_SCHEDULER_PORT_NUM;
+	u32 reg_val;
+
+	if (ppe_type_get(ppe_dev) == PPE_TYPE_MPPE) {
+		for (ret = 0; ret < MPPE_SCHEDULER_PORT_NUM; ret++) {
+			reg_val = FIELD_PREP(PPE_TX_BUFF_THRSH_XOFF, 3) |
+				  FIELD_PREP(PPE_TX_BUFF_THRSH_XON, 3);
+			ppe_write(ppe_dev, PPE_TX_BUFF_THRSH + PPE_TX_BUFF_THRSH_INC * ret,
+				  reg_val);
+
+			/* Fix 147B line rate on physical port */
+			if (ret != 0)
+				ppe_mask(ppe_dev, PPE_RX_FIFO_CFG + PPE_RX_FIFO_CFG_INC * ret,
+					 PPE_RX_FIFO_CFG_THRSH,
+					 FIELD_PREP(PPE_RX_FIFO_CFG_THRSH, 7));
+		}
+
+		port_num = MPPE_SCHEDULER_PORT_NUM;
+	}
+
+	for (ret = 0; ret < port_num; ret++) {
+		if (ret != 0) {
+			memset(&mru_mtu_cfg, 0, sizeof(mru_mtu_cfg));
+			ppe_read_tbl(ppe_dev,
+				     PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * ret,
+				     mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+
+			/* Drop the packet when the packet size is more than
+			 * the MTU of the physical interface.
+			 */
+			mru_mtu_cfg.bf.mru_cmd = PPE_ACTION_DROP;
+			mru_mtu_cfg.bf.mtu_cmd = PPE_ACTION_DROP;
+
+			ppe_write_tbl(ppe_dev,
+				      PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * ret,
+				      mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+
+			ppe_mask(ppe_dev,
+				 PPE_MC_MTU_CTRL_TBL + PPE_MC_MTU_CTRL_TBL_INC * ret,
+				 PPE_MC_MTU_CTRL_TBL_MTU_CMD,
+				 FIELD_PREP(PPE_MC_MTU_CTRL_TBL_MTU_CMD, PPE_ACTION_DROP));
+		}
+
+		/* Enable PPE port counter */
+		ppe_counter_set(ppe_dev, ret, true);
+	}
+
+	return 0;
+}
+
 static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 {
 	int ret;
@@ -1126,7 +1180,11 @@ static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 	if (ret)
 		return ret;
 
-	return ppe_servcode_init(ppe_dev);
+	ret = ppe_servcode_init(ppe_dev);
+	if (ret)
+		return ret;
+
+	return ppe_port_ctrl_init(ppe_dev);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)

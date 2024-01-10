@@ -132,6 +132,16 @@ enum {
 	PPE_TYPE_MAX = 0xff,
 };
 
+/* The action of packet received by PPE can be forwarded, dropped, copied
+ * to CPU(enter multicast queue), redirected to CPU(enter unicast queue).
+ */
+enum {
+	PPE_ACTION_FORWARD = 0,
+	PPE_ACTION_DROP,
+	PPE_ACTION_COPY_TO_CPU,
+	PPE_ACTION_REDIRECTED_TO_CPU
+};
+
 /* PPE private data of different PPE type device */
 struct ppe_data {
 	int ppe_type;
