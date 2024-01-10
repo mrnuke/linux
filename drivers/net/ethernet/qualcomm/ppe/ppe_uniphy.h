@@ -1,0 +1,227 @@
+/* SPDX-License-Identifier: GPL-2.0-only
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/* PPE UNIPHY functions and UNIPHY hardware registers declarations. */
+
+#ifndef _PPE_UNIPHY_H_
+#define _PPE_UNIPHY_H_
+
+#include <linux/phylink.h>
+
+#define UNIPHY_INDIRECT_ADDR_START			0x8000
+#define UNIPHY_INDIRECT_AHB_ADDR			0x83fc
+#define UNIPHY_INDIRECT_ADDR_HIGH			GENMASK(20, 8)
+#define UNIPHY_INDIRECT_ADDR_LOW			GENMASK(7, 0)
+#define UNIPHY_INDIRECT_DATA_ADDR(reg)			(FIELD_PREP(GENMASK(15, 10), 0x20) | \
+							FIELD_PREP(GENMASK(9, 2), \
+							FIELD_GET(UNIPHY_INDIRECT_ADDR_LOW, reg)))
+
+/* [register] UNIPHY_MISC2 */
+#define UNIPHY_MISC2_ADDR				0x218
+#define PHY_MODE					GENMASK(6, 4)
+#define USXGMII_PHY_MODE				(FIELD_PREP(PHY_MODE, 0x7))
+#define SGMII_PLUS_PHY_MODE				(FIELD_PREP(PHY_MODE, 0x5))
+#define SGMII_PHY_MODE					(FIELD_PREP(PHY_MODE, 0x3))
+
+/* [register] UNIPHY_MODE_CTRL */
+#define UNIPHY_MODE_CTRL_ADDR				0x46c
+#define NEWADDEDFROMHERE_CH0_AUTONEG_MODE		BIT(0)
+#define NEWADDEDFROMHERE_CH1_CH0_SGMII			BIT(1)
+#define NEWADDEDFROMHERE_CH4_CH1_0_SGMII		BIT(2)
+#define NEWADDEDFROMHERE_SGMII_EVEN_LOW			BIT(3)
+#define NEWADDEDFROMHERE_CH0_MODE_CTRL_25M		GENMASK(6, 4)
+#define NEWADDEDFROMHERE_CH0_QSGMII_SGMII		BIT(8)
+#define NEWADDEDFROMHERE_CH0_PSGMII_QSGMII		BIT(9)
+#define NEWADDEDFROMHERE_SG_MODE			BIT(10)
+#define NEWADDEDFROMHERE_SGPLUS_MODE			BIT(11)
+#define NEWADDEDFROMHERE_XPCS_MODE			BIT(12)
+#define NEWADDEDFROMHERE_USXG_EN			BIT(13)
+#define NEWADDEDFROMHERE_SW_V17_V18			BIT(15)
+#define USXGMII_MODE_CTRL_MASK				GENMASK(12, 8)
+#define USXGMII_MODE_CTRL				NEWADDEDFROMHERE_XPCS_MODE
+#define TEN_GR_MODE_CTRL_MASK				GENMASK(12, 8)
+#define TEN_GR_MODE_CTRL				NEWADDEDFROMHERE_XPCS_MODE
+#define QUSGMII_MODE_CTRL_MASK				GENMASK(12, 8)
+#define QUSGMII_MODE_CTRL				NEWADDEDFROMHERE_XPCS_MODE
+#define SGMIIPLUS_MODE_CTRL_MASK			(NEWADDEDFROMHERE_CH0_AUTONEG_MODE | \
+								GENMASK(12, 8))
+#define SGMIIPLUS_MODE_CTRL				NEWADDEDFROMHERE_SGPLUS_MODE
+#define QSGMII_MODE_CTRL_MASK				(NEWADDEDFROMHERE_CH0_AUTONEG_MODE | \
+								GENMASK(12, 8))
+#define QSGMII_MODE_CTRL				NEWADDEDFROMHERE_CH0_PSGMII_QSGMII
+#define SGMII_MODE_CTRL_MASK				(NEWADDEDFROMHERE_CH0_AUTONEG_MODE | \
+								GENMASK(12, 8))
+#define SGMII_MODE_CTRL					NEWADDEDFROMHERE_SG_MODE
+
+/* [register] UNIPHY_CHANNEL_INPUT_OUTPUT_4 */
+#define UNIPHY_CHANNEL0_INPUT_OUTPUT_4_ADDR		0x480
+#define NEWADDEDFROMHERE_CH0_ADP_SW_RSTN		BIT(11)
+#define UNIPHY_CHANNEL1_INPUT_OUTPUT_4_ADDR		0x498
+#define NEWADDEDFROMHERE_CH1_ADP_SW_RSTN		BIT(11)
+#define UNIPHY_CHANNEL2_INPUT_OUTPUT_4_ADDR		0x4b0
+#define NEWADDEDFROMHERE_CH2_ADP_SW_RSTN		BIT(11)
+#define UNIPHY_CHANNEL3_INPUT_OUTPUT_4_ADDR		0x4c8
+#define NEWADDEDFROMHERE_CH3_ADP_SW_RSTN		BIT(11)
+#define UNIPHY_CHANNEL4_INPUT_OUTPUT_4_ADDR		0x4e0
+#define NEWADDEDFROMHERE_CH4_ADP_SW_RSTN		BIT(11)
+#define UNIPHY_CHANNEL_INPUT_OUTPUT_4_ADDR(x)		(0x480 + 0x18 * (x))
+#define NEWADDEDFROMHERE_CH_ADP_SW_RSTN			BIT(11)
+
+/* [register] UNIPHY_CHANNEL_INPUT_OUTPUT_6 */
+#define UNIPHY_CHANNEL0_INPUT_OUTPUT_6_ADDR		0x488
+#define NEWADDEDFROMHERE_CH0_LINK_MAC			BIT(7)
+#define NEWADDEDFROMHERE_CH0_DUPLEX_MODE_MAC		BIT(6)
+#define NEWADDEDFROMHERE_CH0_SPEED_MODE_MAC		GENMASK(5, 4)
+#define NEWADDEDFROMHERE_CH0_PAUSE_MAC			BIT(3)
+#define NEWADDEDFROMHERE_CH0_ASYM_PAUSE_MAC		BIT(2)
+#define NEWADDEDFROMHERE_CH0_TX_PAUSE_EN_MAC		BIT(1)
+#define NEWADDEDFROMHERE_CH0_RX_PAUSE_EN_MAC		BIT(0)
+#define UNIPHY_SPEED_10M				0
+#define UNIPHY_SPEED_100M				1
+#define UNIPHY_SPEED_1000M				2
+
+/* [register] UNIPHY_INSTANCE_LINK_DETECT */
+#define UNIPHY_LINK_DETECT_ADDR				0x570
+#define DETECT_LOS_FROM_SFP				GENMASK(8, 6)
+#define UNIPHY_10GR_LINK_LOSS				(FIELD_PREP(DETECT_LOS_FROM_SFP, 0x7))
+
+/* [register] UNIPHY_QP_USXG_OPITON1 */
+#define UNIPHY_QP_USXG_OPITON1_ADDR			0x584
+#define GMII_SRC_SEL					BIT(0)
+
+/* [register] UNIPHY_OFFSET_CALIB_4 */
+#define UNIPHY_OFFSET_CALIB_4_ADDR			0x1e0
+#define MMD1_REG_CALIBRATION_DONE_REG			BIT(7)
+#define UNIPHY_CALIBRATION_DONE				0x1
+
+/* [register] UNIPHY_PLL_RESET */
+#define UNIPHY_PLL_RESET_ADDR				0x780
+#define UPHY_ANA_EN_SW_RSTN				BIT(6)
+
+/* [register] SR_XS_PCS_KR_STS1 */
+#define SR_XS_PCS_KR_STS1_ADDR				0x30020
+#define SR_XS_PCS_KR_STS1_PLU				BIT(12)
+
+/* [register] VR_XS_PCS_DIG_CTRL1 */
+#define VR_XS_PCS_DIG_CTRL1_ADDR			0x38000
+#define USXGMII_EN					BIT(9)
+#define USRA_RST					BIT(10)
+#define VR_RST						BIT(15)
+
+/* [register] VR_XS_PCS_EEE_MCTRL0 */
+#define VR_XS_PCS_EEE_MCTRL0_ADDR			0x38006
+#define LTX_EN						BIT(0)
+#define LRX_EN						BIT(1)
+#define SIGN_BIT					BIT(6)
+#define MULT_FACT_100NS					GENMASK(11, 8)
+
+/* [register] VR_XS_PCS_KR_CTRL */
+#define VR_XS_PCS_KR_CTRL_ADDR	0x38007
+#define USXG_MODE					GENMASK(12, 10)
+#define QUXGMII_MODE					(FIELD_PREP(USXG_MODE, 0x5))
+
+/* [register] VR_XS_PCS_EEE_TXTIMER */
+#define VR_XS_PCS_EEE_TXTIMER_ADDR			0x38008
+#define TSL_RES						GENMASK(5, 0)
+#define T1U_RES						GENMASK(7, 6)
+#define TWL_RES						GENMASK(12, 8)
+#define UNIPHY_XPCS_TSL_TIMER				(FIELD_PREP(TSL_RES, 0xa))
+#define UNIPHY_XPCS_T1U_TIMER				(FIELD_PREP(TSL_RES, 0x3))
+#define UNIPHY_XPCS_TWL_TIMER				(FIELD_PREP(TSL_RES, 0x16))
+
+/* [register] VR_XS_PCS_EEE_RXTIMER  */
+#define VR_XS_PCS_EEE_RXTIMER_ADDR			0x38009
+#define RES_100U					GENMASK(7, 0)
+#define TWR_RES						GENMASK(13, 8)
+#define UNIPHY_XPCS_100US_TIMER				(FIELD_PREP(RES_100U, 0xc8))
+#define UNIPHY_XPCS_TWR_TIMER				(FIELD_PREP(RES_100U, 0x1c))
+
+/* [register] VR_XS_PCS_DIG_STS */
+#define VR_XS_PCS_DIG_STS_ADDR				0x3800a
+#define AM_COUNT					GENMASK(14, 0)
+#define QUXGMII_AM_COUNT				(FIELD_PREP(AM_COUNT, 0x6018))
+
+/* [register] VR_XS_PCS_EEE_MCTRL1 */
+#define VR_XS_PCS_EEE_MCTRL1_ADDR			0x3800b
+#define TRN_LPI						BIT(0)
+#define TRN_RXLPI					BIT(8)
+
+/* [register] VR_MII_1_DIG_CTRL1 */
+#define VR_MII_DIG_CTRL1_CHANNEL1_ADDR			0x1a8000
+#define VR_MII_DIG_CTRL1_CHANNEL2_ADDR			0x1b8000
+#define VR_MII_DIG_CTRL1_CHANNEL3_ADDR			0x1c8000
+#define VR_MII_DIG_CTRL1_CHANNEL_ADDR(x)		(0x1a8000 + 0x10000 * ((x) - 1))
+#define CHANNEL_USRA_RST				BIT(5)
+
+/* [register] VR_MII_AN_CTRL */
+#define VR_MII_AN_CTRL_ADDR				0x1f8001
+#define VR_MII_AN_CTRL_CHANNEL1_ADDR			0x1a8001
+#define VR_MII_AN_CTRL_CHANNEL2_ADDR			0x1b8001
+#define VR_MII_AN_CTRL_CHANNEL3_ADDR			0x1c8001
+#define VR_MII_AN_CTRL_CHANNEL_ADDR(x)			(0x1a8001 + 0x10000 * ((x) - 1))
+#define MII_AN_INTR_EN					BIT(0)
+#define MII_CTRL					BIT(8)
+
+/* [register] VR_MII_AN_INTR_STS */
+#define VR_MII_AN_INTR_STS_ADDR				0x1f8002
+#define VR_MII_AN_INTR_STS_CHANNEL1_ADDR		0x1a8002
+#define VR_MII_AN_INTR_STS_CHANNEL2_ADDR		0x1b8002
+#define VR_MII_AN_INTR_STS_CHANNEL3_ADDR		0x1c8002
+#define VR_MII_AN_INTR_STS_CHANNEL_ADDR(x)		(0x1a8002 + 0x10000 * ((x) - 1))
+#define CL37_ANCMPLT_INTR				BIT(0)
+
+/* [register] VR_XAUI_MODE_CTRL */
+#define VR_XAUI_MODE_CTRL_ADDR				0x1f8004
+#define VR_XAUI_MODE_CTRL_CHANNEL1_ADDR			0x1a8004
+#define VR_XAUI_MODE_CTRL_CHANNEL2_ADDR			0x1b8004
+#define VR_XAUI_MODE_CTRL_CHANNEL3_ADDR			0x1c8004
+#define VR_XAUI_MODE_CTRL_CHANNEL_ADDR(x)		(0x1a8004 + 0x10000 * ((x) - 1))
+#define IPG_CHECK					BIT(0)
+
+/* [register] SR_MII_CTRL */
+#define SR_MII_CTRL_ADDR				0x1f0000
+#define SR_MII_CTRL_CHANNEL1_ADDR			0x1a0000
+#define SR_MII_CTRL_CHANNEL2_ADDR			0x1b0000
+#define SR_MII_CTRL_CHANNEL3_ADDR			0x1c0000
+#define SR_MII_CTRL_CHANNEL_ADDR(x)			(0x1a0000 + 0x10000 * ((x) - 1))
+#define AN_ENABLE					BIT(12)
+#define USXGMII_DUPLEX_FULL				BIT(8)
+#define USXGMII_SPEED_MASK				(BIT(13) | BIT(6) | BIT(5))
+#define USXGMII_SPEED_10000				(BIT(13) | BIT(6))
+#define USXGMII_SPEED_5000				(BIT(13) | BIT(5))
+#define USXGMII_SPEED_2500				BIT(5)
+#define USXGMII_SPEED_1000				BIT(6)
+#define USXGMII_SPEED_100				BIT(13)
+#define USXGMII_SPEED_10				0
+
+/* PPE UNIPHY data type */
+struct ppe_uniphy {
+	void __iomem *base;
+	struct ppe_device *ppe_dev;
+	unsigned int index;
+	phy_interface_t interface;
+	struct phylink_pcs pcs;
+};
+
+#define pcs_to_ppe_uniphy(_pcs)				container_of(_pcs, struct ppe_uniphy, pcs)
+
+struct ppe_uniphy *ppe_uniphy_setup(struct platform_device *pdev);
+
+int ppe_uniphy_speed_set(struct ppe_uniphy *uniphy,
+			 int port, int speed);
+
+int ppe_uniphy_duplex_set(struct ppe_uniphy *uniphy,
+			  int port, int duplex);
+
+int ppe_uniphy_adapter_reset(struct ppe_uniphy *uniphy,
+			     int port);
+
+int ppe_uniphy_autoneg_complete_check(struct ppe_uniphy *uniphy,
+				      int port);
+
+int ppe_uniphy_port_gcc_clock_en_set(struct ppe_uniphy *uniphy,
+				     int port, bool enable);
+
+#endif /* _PPE_UNIPHY_H_ */

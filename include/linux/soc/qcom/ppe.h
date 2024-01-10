@@ -20,6 +20,7 @@ struct ppe_device {
 	struct dentry *debugfs_root;
 	bool is_ppe_probed;
 	void *ppe_priv;
+	void *uniphy;
 };
 
 /* PPE operations, which is used by the external driver like Ethernet

@@ -173,6 +173,8 @@ struct ppe_scheduler_port_resource {
 };
 
 int ppe_type_get(struct ppe_device *ppe_dev);
+struct clk **ppe_clock_get(struct ppe_device *ppe_dev);
+struct reset_control **ppe_reset_get(struct ppe_device *ppe_dev);
 
 int ppe_write(struct ppe_device *ppe_dev, u32 reg, unsigned int val);
 int ppe_read(struct ppe_device *ppe_dev, u32 reg, unsigned int *val);

@@ -18,6 +18,7 @@
 #include "ppe_regs.h"
 #include "ppe_ops.h"
 #include "ppe_debugfs.h"
+#include "ppe_uniphy.h"
 
 #define PPE_SCHEDULER_PORT_NUM		8
 #define MPPE_SCHEDULER_PORT_NUM		3
@@ -174,6 +175,26 @@ int ppe_type_get(struct ppe_device *ppe_dev)
 		return PPE_TYPE_MAX;
 
 	return ppe_dev_priv->ppe_type;
+}
+
+struct clk **ppe_clock_get(struct ppe_device *ppe_dev)
+{
+	struct ppe_data *ppe_dev_priv = ppe_dev->ppe_priv;
+
+	if (!ppe_dev_priv)
+		return NULL;
+
+	return ppe_dev_priv->clk;
+}
+
+struct reset_control **ppe_reset_get(struct ppe_device *ppe_dev)
+{
+	struct ppe_data *ppe_dev_priv = ppe_dev->ppe_priv;
+
+	if (!ppe_dev_priv)
+		return NULL;
+
+	return ppe_dev_priv->rst;
 }
 
 static int ppe_clock_set_enable(struct ppe_device *ppe_dev,
@@ -1404,6 +1425,10 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev,
 				     ret,
 				     "ppe device hw init failed\n");
+
+	ppe_dev->uniphy = ppe_uniphy_setup(pdev);
+	if (IS_ERR(ppe_dev->uniphy))
+		return dev_err_probe(&pdev->dev, ret, "ppe uniphy initialization failed\n");
 
 	ppe_dev->ppe_ops = &qcom_ppe_ops;
 	ppe_dev->is_ppe_probed = true;
