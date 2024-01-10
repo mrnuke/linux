@@ -65,6 +65,9 @@ config QCOM_PPE
 	tristate "Qualcomm Technologies, Inc. PPE Ethernet support"
 	depends on HAS_IOMEM && OF
 	depends on COMMON_CLK
+	select PHYLINK
+	select HWMON
+	select SFP
 	help
 	  This driver supports the Qualcomm Technologies, Inc. packet
 	  process engine(PPE) available with IPQ SoC. The PPE houses

@@ -7,6 +7,16 @@
 #ifndef __PPE_REGS_H__
 #define __PPE_REGS_H__
 
+#define PPE_PORT_MUX_CTRL					0x10
+#define PPE_PORT6_MAC_SEL					BIT(13)
+#define PPE_PORT5_MAC_SEL					BIT(12)
+#define PPE_PORT4_MAC_SEL					BIT(11)
+#define PPE_PORT3_MAC_SEL					BIT(10)
+#define PPE_PORT2_MAC_SEL					BIT(9)
+#define PPE_PORT1_MAC_SEL					BIT(8)
+#define PPE_PORT5_PCS_SEL					BIT(4)
+#define PPE_PORT_MAC_SEL(x)					(PPE_PORT1_MAC_SEL << ((x) - 1))
+
 #define PPE_BM_TDM_CTRL						0xb000
 #define PPE_BM_TDM_CTRL_NUM					1
 #define PPE_BM_TDM_CTRL_INC					4
@@ -818,5 +828,107 @@ union ppe_ac_grp_cfg_u {
 #define PPE_ENQ_OPR_TBL_NUM					300
 #define PPE_ENQ_OPR_TBL_INC					0x10
 #define PPE_ENQ_OPR_TBL_ENQ_DISABLE				BIT(0)
+
+/* PPE MAC Address */
+#define PPE_PORT_GMAC_ADDR(x)					(0x001000 + ((x) - 1) * 0x200)
+#define PPE_PORT_XGMAC_ADDR(x)					(0x500000 + ((x) - 1) * 0x4000)
+
+/* GMAC Registers */
+#define GMAC_ENABLE						0x0
+#define GMAC_TX_FLOW_EN						BIT(6)
+#define GMAC_RX_FLOW_EN						BIT(5)
+#define GMAC_DUPLEX_FULL					BIT(4)
+#define GMAC_TXMAC_EN						BIT(1)
+#define GMAC_RXMAC_EN						BIT(0)
+#define GMAC_MAC_EN						(GMAC_RXMAC_EN | GMAC_TXMAC_EN)
+
+#define GMAC_SPEED						0x4
+#define GMAC_SPEED_MASK						GENMASK(1, 0)
+#define GMAC_SPEED_10						0
+#define GMAC_SPEED_100						1
+#define GMAC_SPEED_1000						2
+
+#define GMAC_MAC_CTRL2						0x18
+#define GMAC_TX_THD_MASK					GENMASK(27, 24)
+#define GMAC_MAXFR_MASK						GENMASK(21, 8)
+#define GMAC_CRS_SEL						BIT(6)
+#define GMAC_TX_THD						0x1
+#define GMAC_INIT_CTRL2_FIELD					(GMAC_MAXFR_MASK | \
+								GMAC_CRS_SEL | GMAC_TX_THD_MASK)
+#define GMAC_INIT_CTRL2						(FIELD_PREP(GMAC_MAXFR_MASK, \
+				MAC_MAX_FRAME_SIZE) | FIELD_PREP(GMAC_TX_THD_MASK, GMAC_TX_THD))
+
+#define GMAC_MAC_DBG_CTRL					0x1c
+#define GMAC_HIGH_IPG_MASK					GENMASK(15, 8)
+#define GMAC_IPG_CHECK						0xc
+
+#define GMAC_MAC_JUMBO_SIZE					0x30
+#define GMAC_JUMBO_SIZE_MASK					GENMASK(13, 0)
+#define MAC_MAX_FRAME_SIZE					0x3000
+
+#define GMAC_MAC_MIB_CTRL					0x34
+#define MAC_MIB_RD_CLR						BIT(2)
+#define MAC_MIB_RESET						BIT(1)
+#define MAC_MIB_EN						BIT(0)
+
+/* XGMAC Registers */
+#define XGMAC_TX_CONFIGURATION					0x0
+#define XGMAC_SPEED_MASK					GENMASK(31, 29)
+#define XGMAC_SPEED_10000_USXGMII				FIELD_PREP(XGMAC_SPEED_MASK, 4)
+#define XGMAC_SPEED_10000					FIELD_PREP(XGMAC_SPEED_MASK, 0)
+#define XGMAC_SPEED_5000					FIELD_PREP(XGMAC_SPEED_MASK, 5)
+#define XGMAC_SPEED_2500_USXGMII				FIELD_PREP(XGMAC_SPEED_MASK, 6)
+#define XGMAC_SPEED_2500					FIELD_PREP(XGMAC_SPEED_MASK, 2)
+#define XGMAC_SPEED_1000					FIELD_PREP(XGMAC_SPEED_MASK, 3)
+#define XGMAC_SPEED_100						XGMAC_SPEED_1000
+#define XGMAC_SPEED_10						XGMAC_SPEED_1000
+
+#define XGMAC_JD						BIT(16)
+#define XGMAC_TE						BIT(0)
+#define XGMAC_INIT_TX_CONFIG_FIELD				(XGMAC_JD | XGMAC_TE)
+#define XGMAC_INIT_TX_CONFIG					XGMAC_JD
+
+#define XGMAC_RX_CONFIGURATION					0x4
+#define XGMAC_GPSL_MASK						GENMASK(29, 16)
+#define XGMAC_WD						BIT(7)
+#define XGMAC_GPSLCE						BIT(6)
+#define XGMAC_CST						BIT(2)
+#define XGMAC_ACS						BIT(1)
+#define XGMAC_RE						BIT(0)
+#define XGMAC_INIT_RX_CONFIG_FIELD				(XGMAC_RE | XGMAC_ACS | \
+					XGMAC_CST | XGMAC_WD | XGMAC_GPSLCE | XGMAC_GPSL_MASK)
+#define XGMAC_INIT_RX_CONFIG					(XGMAC_ACS | XGMAC_CST | \
+				XGMAC_GPSLCE | FIELD_PREP(XGMAC_GPSL_MASK, MAC_MAX_FRAME_SIZE))
+
+#define XGMAC_PACKET_FILTER					0x8
+#define XGMAC_RA						BIT(31)
+#define XGMAC_PCF_MASK						GENMASK(7, 6)
+#define XGMAC_PR						BIT(0)
+#define XGMAC_PASS_CONTROL_PACKET				0x2
+#define XGMAC_INIT_FILTER_FIELD					(XGMAC_RA | XGMAC_PR | \
+									XGMAC_PCF_MASK)
+#define XGMAC_INIT_FILTER					(XGMAC_RA | XGMAC_PR | \
+								FIELD_PREP(XGMAC_PCF_MASK, \
+									XGMAC_PASS_CONTROL_PACKET))
+
+#define XGMAC_WATCHDOG_TIMEOUT					0xc
+#define XGMAC_PWE						BIT(8)
+#define XGMAC_WTO_MASK						GENMASK(3, 0)
+#define XGMAC_WTO_LIMIT_13K					0xb
+#define XGMAC_INIT_WATCHDOG_FIELD				(XGMAC_PWE | XGMAC_WTO_MASK)
+#define XGMAC_INIT_WATCHDOG					(XGMAC_PWE | \
+						FIELD_PREP(XGMAC_WTO_MASK, XGMAC_WTO_LIMIT_13K))
+
+#define XGMAC_Q0_TX_FLOW_CTRL					0x70
+#define XGMAC_PT_MASK						GENMASK(31, 16)
+#define XGMAC_PAUSE_TIME					FIELD_PREP(XGMAC_PT_MASK, 0xffff)
+#define XGMAC_TFE						BIT(1)
+
+#define XGMAC_RX_FLOW_CTRL					0x90
+#define XGMAC_RFE						BIT(0)
+
+#define XGMAC_MMC_CONTROL					0x800
+#define XGMAC_MCF						BIT(3)
+#define XGMAC_CNTRST						BIT(0)
 
 #endif

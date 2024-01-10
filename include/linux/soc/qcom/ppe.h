@@ -9,6 +9,7 @@
 #define __QCOM_PPE_H__
 
 #include <linux/platform_device.h>
+#include <linux/phylink.h>
 
 /* PPE platform private data, which is used by external driver like
  * Ethernet DMA driver.
@@ -20,6 +21,8 @@ struct ppe_device {
 	struct dentry *debugfs_root;
 	bool is_ppe_probed;
 	void *ppe_priv;
+	struct mutex reg_mutex; /* Protects ppe reg operation */
+	void *ports;
 	void *uniphy;
 };
 
@@ -27,6 +30,36 @@ struct ppe_device {
  * DMA driver to configure PPE.
  */
 struct ppe_device_ops {
+	/*
+	 * PHYLINK integration
+	 */
+	struct phylink *(*phylink_setup)(struct ppe_device *ppe_dev,
+					 struct net_device *netdev, int port);
+	void	(*phylink_destroy)(struct ppe_device *ppe_dev,
+				   int port);
+	void	(*phylink_mac_config)(struct ppe_device *ppe_dev,
+				      int port,
+				      unsigned int mode,
+				      const struct phylink_link_state *state);
+	void	(*phylink_mac_link_up)(struct ppe_device *ppe_dev,
+				       int port,
+				       struct phy_device *phy,
+				       unsigned int mode,
+				       phy_interface_t interface,
+				       int speed,
+				       int duplex,
+				       bool tx_pause,
+				       bool rx_pause);
+	void	(*phylink_mac_link_down)(struct ppe_device *ppe_dev,
+					 int port,
+					 unsigned int mode,
+					 phy_interface_t interface);
+	struct phylink_pcs *(*phylink_mac_select_pcs)(struct ppe_device *ppe_dev,
+						      int port,
+						      phy_interface_t interface);
+	/*
+	 * Port maximum frame size setting
+	 */
 	int	(*set_maxframe)(struct ppe_device *ppe_dev, int port,
 				int maxframe_size);
 };

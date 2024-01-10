@@ -13,6 +13,8 @@
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
 #include <linux/if_ether.h>
+#include <linux/of_net.h>
+#include <linux/rtnetlink.h>
 #include <linux/soc/qcom/ppe.h>
 #include "ppe.h"
 #include "ppe_regs.h"
@@ -197,6 +199,19 @@ struct reset_control **ppe_reset_get(struct ppe_device *ppe_dev)
 	return ppe_dev_priv->rst;
 }
 
+static struct ppe_port *ppe_port_get(struct ppe_device *ppe_dev, int port)
+{
+	struct ppe_ports *ppe_ports = (struct ppe_ports *)ppe_dev->ports;
+	int i = 0;
+
+	for (i = 0; i < ppe_ports->num; i++) {
+		if (ppe_ports->port[i].port_id == port)
+			return &ppe_ports->port[i];
+	}
+
+	return NULL;
+}
+
 static int ppe_clock_set_enable(struct ppe_device *ppe_dev,
 				enum ppe_clk_id clk_id, unsigned long rate)
 {
@@ -302,6 +317,869 @@ static int ppe_clock_config(struct platform_device *pdev)
 	return 0;
 }
 
+static int ppe_port_mac_reset(struct ppe_device *ppe_dev, int port)
+{
+	struct ppe_data *ppe_dev_priv = ppe_dev->ppe_priv;
+
+	reset_control_assert(ppe_dev_priv->rst[PPE_NSS_PORT1_MAC_RST + port - 1]);
+	if (ppe_dev_priv->ppe_type == PPE_TYPE_APPE) {
+		reset_control_assert(ppe_dev_priv->rst[PPE_NSS_PORT1_RST + port]);
+	} else if (ppe_dev_priv->ppe_type == PPE_TYPE_MPPE) {
+		reset_control_assert(ppe_dev_priv->rst[PPE_NSS_PORT1_RX_RST + ((port - 1) << 1)]);
+		reset_control_assert(ppe_dev_priv->rst[PPE_NSS_PORT1_TX_RST + ((port - 1) << 1)]);
+	}
+	fsleep(150000);
+
+	reset_control_deassert(ppe_dev_priv->rst[PPE_NSS_PORT1_MAC_RST + port - 1]);
+	if (ppe_dev_priv->ppe_type == PPE_TYPE_APPE) {
+		reset_control_deassert(ppe_dev_priv->rst[PPE_NSS_PORT1_RST + port]);
+	} else if (ppe_dev_priv->ppe_type == PPE_TYPE_MPPE) {
+		reset_control_deassert(ppe_dev_priv->rst[PPE_NSS_PORT1_RX_RST + ((port - 1) << 1)]);
+		reset_control_deassert(ppe_dev_priv->rst[PPE_NSS_PORT1_TX_RST + ((port - 1) << 1)]);
+	}
+	fsleep(150000);
+
+	return 0;
+}
+
+static int ppe_gcc_port_speed_clk_set(struct ppe_device *ppe_dev,
+				      int port, int speed, phy_interface_t interface)
+{
+	struct ppe_data *ppe_dev_priv = ppe_dev->ppe_priv;
+	enum ppe_clk_id rx_id, tx_id;
+	unsigned long rate = 0;
+	int err = 0;
+
+	rx_id = PPE_NSS_PORT1_RX_CLK + ((port - 1) << 1);
+	tx_id = PPE_NSS_PORT1_TX_CLK + ((port - 1) << 1);
+
+	switch (interface) {
+	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10GKR:
+	case PHY_INTERFACE_MODE_QUSGMII:
+	case PHY_INTERFACE_MODE_10GBASER:
+		if (speed == SPEED_10)
+			rate = 1250000;
+		else if (speed == SPEED_100)
+			rate = 12500000;
+		else if (speed == SPEED_1000)
+			rate = 125000000;
+		else if (speed == SPEED_2500)
+			rate = 78125000;
+		else if (speed == SPEED_5000)
+			rate = 156250000;
+		else if (speed == SPEED_10000)
+			rate = 312500000;
+		break;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		if (speed == SPEED_2500)
+			rate = 312500000;
+		break;
+	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+	case PHY_INTERFACE_MODE_SGMII:
+		if (speed == SPEED_10)
+			rate = 2500000;
+		else if (speed == SPEED_100)
+			rate = 25000000;
+		else if (speed == SPEED_1000)
+			rate = 125000000;
+		break;
+	default:
+		break;
+	}
+
+	if (!IS_ERR(ppe_dev_priv->clk[rx_id])) {
+		err = clk_set_rate(ppe_dev_priv->clk[rx_id], rate);
+		if (err) {
+			dev_err(ppe_dev->dev,
+				"Failed to set ppe port %d speed rx clk(%d)\n",
+				port, rx_id);
+			return err;
+		}
+	}
+
+	if (!IS_ERR(ppe_dev_priv->clk[tx_id])) {
+		err = clk_set_rate(ppe_dev_priv->clk[tx_id], rate);
+		if (err) {
+			dev_err(ppe_dev->dev,
+				"Failed to set ppe port %d speed rx clk(%d)\n",
+				port, rx_id);
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+static int ppe_mac_speed_set(struct ppe_device *ppe_dev,
+			     int port, int speed, phy_interface_t interface)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_SPEED,
+			 &val);
+		val &= ~GMAC_SPEED_MASK;
+		switch (speed) {
+		case SPEED_10:
+			val |= GMAC_SPEED_10;
+			break;
+		case SPEED_100:
+			val |= GMAC_SPEED_100;
+			break;
+		case SPEED_1000:
+			val |= GMAC_SPEED_1000;
+			break;
+		default:
+			break;
+		}
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_SPEED,
+			  val);
+	} else if (ppe_port->mac_type == PPE_MAC_TYPE_XGMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_TX_CONFIGURATION,
+			 &val);
+		val &= ~XGMAC_SPEED_MASK;
+		switch (speed) {
+		case SPEED_10000:
+			if (interface == PHY_INTERFACE_MODE_USXGMII ||
+			    interface == PHY_INTERFACE_MODE_QUSGMII)
+				val |= XGMAC_SPEED_10000_USXGMII;
+			else
+				val |= XGMAC_SPEED_10000;
+			break;
+		case SPEED_5000:
+			val |= XGMAC_SPEED_5000;
+			break;
+		case SPEED_2500:
+			if (interface == PHY_INTERFACE_MODE_USXGMII ||
+			    interface == PHY_INTERFACE_MODE_QUSGMII)
+				val |= XGMAC_SPEED_2500_USXGMII;
+			else
+				val |= XGMAC_SPEED_2500;
+			break;
+		case SPEED_1000:
+			val |= XGMAC_SPEED_1000;
+			break;
+		case SPEED_100:
+			val |= XGMAC_SPEED_100;
+			break;
+		case SPEED_10:
+			val |= XGMAC_SPEED_10;
+			break;
+		default:
+			break;
+		}
+		ppe_write(ppe_dev,
+			  PPE_PORT_XGMAC_ADDR(port) + XGMAC_TX_CONFIGURATION,
+			  val);
+	}
+
+	return 0;
+}
+
+static int ppe_mac_duplex_set(struct ppe_device *ppe_dev, int port, int duplex)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 &val);
+		if (duplex == DUPLEX_FULL)
+			val |= GMAC_DUPLEX_FULL;
+		else
+			val &= ~GMAC_DUPLEX_FULL;
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			  val);
+	}
+
+	return 0;
+}
+
+static int ppe_mac_txfc_status_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 &val);
+		if (enable)
+			val |= GMAC_TX_FLOW_EN;
+		else
+			val &= ~GMAC_TX_FLOW_EN;
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			  val);
+	} else if (ppe_port->mac_type == PPE_MAC_TYPE_XGMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_Q0_TX_FLOW_CTRL,
+			 &val);
+		if (enable) {
+			val &= ~XGMAC_PT_MASK;
+			val |= (XGMAC_PAUSE_TIME | XGMAC_TFE);
+		} else {
+			val &= ~XGMAC_TFE;
+		}
+		ppe_write(ppe_dev,
+			  PPE_PORT_XGMAC_ADDR(port) + XGMAC_Q0_TX_FLOW_CTRL,
+			  val);
+	}
+
+	ppe_read(ppe_dev,
+		 PPE_BM_PORT_FC_MODE + PPE_BM_PORT_FC_MODE_INC * (port + 7),
+		 &val);
+	if (enable)
+		val |= PPE_BM_PORT_FC_MODE_EN;
+	else
+		val &= ~PPE_BM_PORT_FC_MODE_EN;
+	ppe_write(ppe_dev,
+		  PPE_BM_PORT_FC_MODE + PPE_BM_PORT_FC_MODE_INC * (port + 7),
+		  val);
+
+	return 0;
+}
+
+static int ppe_mac_rxfc_status_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 &val);
+		if (enable)
+			val |= GMAC_RX_FLOW_EN;
+		else
+			val &= ~GMAC_RX_FLOW_EN;
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			  val);
+	} else if (ppe_port->mac_type == PPE_MAC_TYPE_XGMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_RX_FLOW_CTRL,
+			 &val);
+		if (enable)
+			val |= XGMAC_RFE;
+		else
+			val &= ~XGMAC_RFE;
+		ppe_write(ppe_dev,
+			  PPE_PORT_XGMAC_ADDR(port) + XGMAC_RX_FLOW_CTRL,
+			  val);
+	}
+
+	return 0;
+}
+
+static int ppe_mac_txmac_en_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 &val);
+		if (enable)
+			val |= GMAC_TXMAC_EN;
+		else
+			val &= ~GMAC_TXMAC_EN;
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			  val);
+	} else if (ppe_port->mac_type == PPE_MAC_TYPE_XGMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_TX_CONFIGURATION,
+			 &val);
+		if (enable)
+			val |= XGMAC_TE;
+		else
+			val &= ~XGMAC_TE;
+		ppe_write(ppe_dev,
+			  PPE_PORT_XGMAC_ADDR(port) + XGMAC_TX_CONFIGURATION,
+			  val);
+	}
+
+	return 0;
+}
+
+static int ppe_mac_rxmac_en_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return -ENOENT;
+	}
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 &val);
+		if (enable)
+			val |= GMAC_RXMAC_EN;
+		else
+			val &= ~GMAC_RXMAC_EN;
+		ppe_write(ppe_dev,
+			  PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			  val);
+	} else if (ppe_port->mac_type == PPE_MAC_TYPE_XGMAC) {
+		ppe_read(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_RX_CONFIGURATION,
+			 &val);
+		if (enable)
+			val |= XGMAC_RE;
+		else
+			val &= ~XGMAC_RE;
+		ppe_write(ppe_dev,
+			  PPE_PORT_XGMAC_ADDR(port) + XGMAC_RX_CONFIGURATION,
+			  val);
+	}
+
+	return 0;
+}
+
+static int ppe_port_bridge_txmac_en_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	u32 val;
+
+	ppe_read(ppe_dev,
+		 PPE_PORT_BRIDGE_CTRL + PPE_PORT_BRIDGE_CTRL_INC * port,
+		 &val);
+
+	if (enable)
+		val |= PPE_PORT_BRIDGE_CTRL_TXMAC_EN;
+	else
+		val &= ~PPE_PORT_BRIDGE_CTRL_TXMAC_EN;
+
+	ppe_write(ppe_dev,
+		  PPE_PORT_BRIDGE_CTRL + PPE_PORT_BRIDGE_CTRL_INC * port,
+		  val);
+
+	return 0;
+}
+
+static void ppe_phylink_mac_config(struct ppe_device *ppe_dev, int port,
+				   unsigned int mode, const struct phylink_link_state *state)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	int mac_type;
+	u32 val;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return;
+	}
+
+	switch (state->interface) {
+	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_2500BASEX:
+	case PHY_INTERFACE_MODE_10GBASER:
+	case PHY_INTERFACE_MODE_QUSGMII:
+		mac_type = PPE_MAC_TYPE_XGMAC;
+		break;
+	default:
+		mac_type = PPE_MAC_TYPE_GMAC;
+		break;
+	}
+
+	if (ppe_port->mac_type != mac_type) {
+		/* Reset port mac for gmac */
+		if (mac_type == PPE_MAC_TYPE_GMAC)
+			ppe_port_mac_reset(ppe_dev, port);
+
+		/* Port mux to select gmac or xgmac */
+		mutex_lock(&ppe_dev->reg_mutex);
+		ppe_read(ppe_dev, PPE_PORT_MUX_CTRL, &val);
+		if (mac_type == PPE_MAC_TYPE_GMAC)
+			val &= ~PPE_PORT_MAC_SEL(port);
+		else
+			val |= PPE_PORT_MAC_SEL(port);
+		if (port == PPE_PORT5)
+			val |= PPE_PORT5_PCS_SEL;
+
+		ppe_write(ppe_dev, PPE_PORT_MUX_CTRL, val);
+		mutex_unlock(&ppe_dev->reg_mutex);
+		ppe_port->mac_type = mac_type;
+	}
+
+	/* Reset ppe port link status when interface changes,
+	 * this allows PPE MAC and UNIPHY to be configured
+	 * according to the port link up status in ppe phylink
+	 * mac link up.
+	 */
+	if (state->interface != ppe_port->interface) {
+		ppe_port->speed = SPEED_UNKNOWN;
+		ppe_port->duplex = DUPLEX_UNKNOWN;
+		ppe_port->pause = MLO_PAUSE_NONE;
+		ppe_port->interface = state->interface;
+	}
+
+	dev_info(ppe_dev->dev, "PPE port %d mac config: interface %s, mac_type %d\n",
+		 port, phy_modes(state->interface), mac_type);
+}
+
+static struct phylink_pcs *ppe_phylink_mac_select_pcs(struct ppe_device *ppe_dev,
+						      int port, phy_interface_t interface)
+{
+	struct ppe_uniphy *uniphy = (struct ppe_uniphy *)ppe_dev->uniphy;
+	int ppe_type = ppe_type_get(ppe_dev);
+	int index;
+
+	switch (port) {
+	case PPE_PORT6:
+		index = 2;
+		break;
+	case PPE_PORT5:
+		index = 1;
+		break;
+	case PPE_PORT4:
+	case PPE_PORT3:
+		index = 0;
+		break;
+	case PPE_PORT2:
+		if (ppe_type == PPE_TYPE_MPPE)
+			index = 1;
+		else if (ppe_type == PPE_TYPE_APPE)
+			index = 0;
+		break;
+	case PPE_PORT1:
+		index = 0;
+		break;
+	default:
+		index = -1;
+		break;
+	}
+
+	if (index >= 0)
+		return &uniphy[index].pcs;
+	else
+		return NULL;
+}
+
+static void ppe_phylink_mac_link_up(struct ppe_device *ppe_dev, int port,
+				    struct phy_device *phy,
+				    unsigned int mode, phy_interface_t interface,
+				    int speed, int duplex, bool tx_pause, bool rx_pause)
+{
+	struct phylink_pcs *pcs = ppe_phylink_mac_select_pcs(ppe_dev, port, interface);
+	struct ppe_uniphy *uniphy = pcs_to_ppe_uniphy(pcs);
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+
+	/* Wait uniphy auto-negotiation completion */
+	ppe_uniphy_autoneg_complete_check(uniphy, port);
+
+	if (speed != ppe_port->speed ||
+	    duplex != ppe_port->duplex ||
+		tx_pause != !!(ppe_port->pause & MLO_PAUSE_TX) ||
+		rx_pause != !!(ppe_port->pause & MLO_PAUSE_RX)) {
+		/* Disable gcc uniphy port clk */
+		ppe_uniphy_port_gcc_clock_en_set(uniphy, port, false);
+
+		if (speed != ppe_port->speed) {
+			/* Set gcc port speed clock */
+			ppe_gcc_port_speed_clk_set(ppe_dev, port, speed, interface);
+			fsleep(10000);
+			/* Set uniphy channel speed */
+			ppe_uniphy_speed_set(uniphy, port, speed);
+			/* Set mac speed */
+			ppe_mac_speed_set(ppe_dev, port, speed, interface);
+			ppe_port->speed = speed;
+		}
+
+		if (duplex != ppe_port->duplex) {
+			/* Set uniphy channel duplex */
+			ppe_uniphy_duplex_set(uniphy, port, duplex);
+			/* Set mac duplex */
+			ppe_mac_duplex_set(ppe_dev, port, duplex);
+			ppe_port->duplex = duplex;
+		}
+
+		if (tx_pause != !!(ppe_port->pause & MLO_PAUSE_TX)) {
+			/* Set mac tx flow ctrl */
+			ppe_mac_txfc_status_set(ppe_dev, port, tx_pause);
+			if (tx_pause)
+				ppe_port->pause |= MLO_PAUSE_TX;
+			else
+				ppe_port->pause &= ~MLO_PAUSE_TX;
+		}
+
+		if (rx_pause != !!(ppe_port->pause & MLO_PAUSE_RX)) {
+			/* Set mac rx flow ctrl */
+			ppe_mac_rxfc_status_set(ppe_dev, port, rx_pause);
+			if (rx_pause)
+				ppe_port->pause |= MLO_PAUSE_RX;
+			else
+				ppe_port->pause &= ~MLO_PAUSE_RX;
+		}
+
+		/* Enable gcc uniphy port clk */
+		ppe_uniphy_port_gcc_clock_en_set(uniphy, port, true);
+
+		/* Reset uniphy channel adapter */
+		ppe_uniphy_adapter_reset(uniphy, port);
+	}
+
+	/* Enable ppe mac tx and rx */
+	ppe_mac_txmac_en_set(ppe_dev, port, true);
+	ppe_mac_rxmac_en_set(ppe_dev, port, true);
+
+	/* Enable ppe bridge port tx mac */
+	ppe_port_bridge_txmac_en_set(ppe_dev, port, true);
+
+	dev_info(ppe_dev->dev,
+		 "PPE port %d interface %s link up - %s%s - pause tx %d rx %d\n",
+		 port, phy_modes(interface), phy_speed_to_str(speed),
+		 phy_duplex_to_str(duplex), tx_pause, rx_pause);
+}
+
+static void ppe_phylink_mac_link_down(struct ppe_device *ppe_dev, int port,
+				      unsigned int mode, phy_interface_t interface)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+
+	if (!ppe_port)
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+
+	/* Disable ppe port bridge tx mac */
+	ppe_port_bridge_txmac_en_set(ppe_dev, port, false);
+
+	/* Disable ppe mac rx */
+	ppe_mac_rxmac_en_set(ppe_dev, port, false);
+	fsleep(10000);
+
+	/* Disable ppe mac tx */
+	ppe_mac_txmac_en_set(ppe_dev, port, false);
+
+	dev_info(ppe_dev->dev, "PPE port %d interface %s link down\n",
+		 port, phy_modes(interface));
+}
+
+static int ppe_mac_init(struct platform_device *pdev)
+{
+	struct device_node *ports_node, *port_node;
+	struct ppe_device *ppe_dev = platform_get_drvdata(pdev);
+	struct ppe_ports *ppe_ports = NULL;
+	phy_interface_t phy_mode = PHY_INTERFACE_MODE_NA;
+	int i = 0, port = 0, err = 0, port_num = 0;
+
+	ports_node = of_get_child_by_name(pdev->dev.of_node, "qcom,port_phyinfo");
+	if (!ports_node) {
+		dev_err(&pdev->dev, "Failed to get qcom port phy info node\n");
+		return -ENODEV;
+	}
+
+	port_num = of_get_child_count(ports_node);
+
+	ppe_ports = devm_kzalloc(&pdev->dev,
+				 struct_size(ppe_ports, port, port_num),
+				 GFP_KERNEL);
+	if (!ppe_ports) {
+		err = -ENOMEM;
+		goto err_ports_node_put;
+	}
+
+	ppe_dev->ports = ppe_ports;
+	ppe_ports->num = port_num;
+
+	for_each_available_child_of_node(ports_node, port_node) {
+		err = of_property_read_u32(port_node, "port_id", &port);
+		if (err) {
+			dev_err(&pdev->dev, "Failed to get port id\n");
+			goto err_port_node_put;
+		}
+
+		err = of_get_phy_mode(port_node, &phy_mode);
+		if (err) {
+			dev_err(&pdev->dev, "Failed to get phy mode\n");
+			goto err_port_node_put;
+		}
+
+		ppe_ports->port[i].ppe_dev = ppe_dev;
+		ppe_ports->port[i].port_id = port;
+		ppe_ports->port[i].np = port_node;
+		ppe_ports->port[i].interface = phy_mode;
+		ppe_ports->port[i].mac_type = PPE_MAC_TYPE_NA;
+		ppe_ports->port[i].speed = SPEED_UNKNOWN;
+		ppe_ports->port[i].duplex = DUPLEX_UNKNOWN;
+		ppe_ports->port[i].pause = MLO_PAUSE_NONE;
+		i++;
+
+		/* Port gmac HW initialization */
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_ENABLE,
+			 GMAC_MAC_EN, 0);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_MAC_JUMBO_SIZE,
+			 GMAC_JUMBO_SIZE_MASK,
+			 FIELD_PREP(GMAC_JUMBO_SIZE_MASK, MAC_MAX_FRAME_SIZE));
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_MAC_CTRL2,
+			 GMAC_INIT_CTRL2_FIELD, GMAC_INIT_CTRL2);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_MAC_DBG_CTRL,
+			 GMAC_HIGH_IPG_MASK,
+			 FIELD_PREP(GMAC_HIGH_IPG_MASK, GMAC_IPG_CHECK));
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_MAC_MIB_CTRL,
+			 MAC_MIB_EN | MAC_MIB_RD_CLR | MAC_MIB_RESET,
+			 MAC_MIB_EN | MAC_MIB_RD_CLR | MAC_MIB_RESET);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_GMAC_ADDR(port) + GMAC_MAC_MIB_CTRL,
+			 MAC_MIB_RESET, 0);
+
+		/* Port xgmac HW initialization */
+		ppe_mask(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_TX_CONFIGURATION,
+			 XGMAC_INIT_TX_CONFIG_FIELD, XGMAC_INIT_TX_CONFIG);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_RX_CONFIGURATION,
+			 XGMAC_INIT_RX_CONFIG_FIELD, XGMAC_INIT_RX_CONFIG);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_WATCHDOG_TIMEOUT,
+			 XGMAC_INIT_WATCHDOG_FIELD, XGMAC_INIT_WATCHDOG);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_PACKET_FILTER,
+			 XGMAC_INIT_FILTER_FIELD, XGMAC_INIT_FILTER);
+
+		ppe_mask(ppe_dev,
+			 PPE_PORT_XGMAC_ADDR(port) + XGMAC_MMC_CONTROL,
+			 XGMAC_MCF | XGMAC_CNTRST, XGMAC_CNTRST);
+	}
+
+	of_node_put(ports_node);
+	dev_info(ppe_dev->dev, "QCOM PPE MAC init success\n");
+	return 0;
+
+err_port_node_put:
+	of_node_put(port_node);
+err_ports_node_put:
+	of_node_put(ports_node);
+	return err;
+}
+
+static void ppe_mac_config(struct phylink_config *config, unsigned int mode,
+			   const struct phylink_link_state *state)
+{
+	struct ppe_device *ppe_dev = NULL;
+	struct ppe_port *ppe_port = container_of(config,
+						 struct ppe_port,
+						 phylink_config);
+
+	if (!ppe_port)
+		dev_err(ppe_dev->dev, "Failed to find ppe port\n");
+
+	ppe_dev = ppe_port->ppe_dev;
+
+	if (ppe_dev && ppe_dev->ppe_ops &&
+	    ppe_dev->ppe_ops->phylink_mac_config) {
+		ppe_dev->ppe_ops->phylink_mac_config(ppe_dev,
+						     ppe_port->port_id,
+						     mode, state);
+	} else {
+		dev_err(ppe_dev->dev,
+			"Failed to find ppe device mac config operation\n");
+	}
+}
+
+static void ppe_mac_link_down(struct phylink_config *config, unsigned int mode,
+			      phy_interface_t interface)
+{
+	struct ppe_device *ppe_dev = NULL;
+	struct ppe_port *ppe_port = container_of(config,
+						 struct ppe_port,
+						 phylink_config);
+
+	if (!ppe_port)
+		dev_err(ppe_dev->dev, "Failed to find ppe port\n");
+
+	ppe_dev = ppe_port->ppe_dev;
+
+	if (ppe_dev && ppe_dev->ppe_ops &&
+	    ppe_dev->ppe_ops->phylink_mac_link_down) {
+		ppe_dev->ppe_ops->phylink_mac_link_down(ppe_dev,
+							ppe_port->port_id,
+							mode, interface);
+	} else {
+		dev_err(ppe_dev->dev,
+			"Failed to find ppe device link down operation\n");
+	}
+}
+
+static void ppe_mac_link_up(struct phylink_config *config,
+			    struct phy_device *phy,
+			    unsigned int mode, phy_interface_t interface,
+			    int speed, int duplex, bool tx_pause, bool rx_pause)
+{
+	struct ppe_device *ppe_dev = NULL;
+	struct ppe_port *ppe_port = container_of(config,
+						 struct ppe_port,
+						 phylink_config);
+
+	if (!ppe_port)
+		dev_err(ppe_dev->dev, "Failed to find ppe port\n");
+
+	ppe_dev = ppe_port->ppe_dev;
+
+	if (ppe_dev && ppe_dev->ppe_ops &&
+	    ppe_dev->ppe_ops->phylink_mac_link_up) {
+		ppe_dev->ppe_ops->phylink_mac_link_up(ppe_dev,
+						      ppe_port->port_id,
+						      phy, mode, interface,
+						      speed, duplex,
+						      tx_pause, rx_pause);
+	} else {
+		dev_err(ppe_dev->dev,
+			"Failed to find ppe device link up operation\n");
+	}
+}
+
+static struct phylink_pcs *ppe_mac_select_pcs(struct phylink_config *config,
+					      phy_interface_t interface)
+{
+	struct ppe_device *ppe_dev = NULL;
+	struct ppe_port *ppe_port = container_of(config,
+						 struct ppe_port,
+						 phylink_config);
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port");
+		return NULL;
+	}
+
+	ppe_dev = ppe_port->ppe_dev;
+
+	if (ppe_dev && ppe_dev->ppe_ops &&
+	    ppe_dev->ppe_ops->phylink_mac_select_pcs) {
+		return ppe_dev->ppe_ops->phylink_mac_select_pcs(ppe_dev,
+								ppe_port->port_id,
+								interface);
+	} else {
+		dev_err(ppe_dev->dev,
+			"Failed to find ppe device pcs select operation\n");
+		return NULL;
+	}
+}
+
+static const struct phylink_mac_ops ppe_phylink_ops = {
+	.mac_config = ppe_mac_config,
+	.mac_link_down = ppe_mac_link_down,
+	.mac_link_up = ppe_mac_link_up,
+	.mac_select_pcs = ppe_mac_select_pcs,
+};
+
+static struct phylink *ppe_phylink_setup(struct ppe_device *ppe_dev,
+					 struct net_device *netdev,
+					 int port)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+	int err;
+
+	if (!ppe_port) {
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+		return NULL;
+	}
+
+	/* per port phylink capability */
+	ppe_port->phylink_config.dev = &netdev->dev;
+	ppe_port->phylink_config.type = PHYLINK_NETDEV;
+	ppe_port->phylink_config.mac_capabilities = MAC_ASYM_PAUSE | MAC_SYM_PAUSE |
+		MAC_10 | MAC_100 | MAC_1000 | MAC_2500FD | MAC_5000FD | MAC_10000FD;
+	__set_bit(PHY_INTERFACE_MODE_SGMII,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_USXGMII,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_10GBASER,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_QSGMII,
+		  ppe_port->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_QUSGMII,
+		  ppe_port->phylink_config.supported_interfaces);
+
+	/* create phylink */
+	ppe_port->phylink = phylink_create(&ppe_port->phylink_config,
+					   of_fwnode_handle(ppe_port->np),
+					   ppe_port->interface, &ppe_phylink_ops);
+	if (IS_ERR(ppe_port->phylink)) {
+		dev_err(ppe_dev->dev, "Failed to create phylink for port %d\n", port);
+		return NULL;
+	}
+
+	/* connect phylink */
+	err = phylink_of_phy_connect(ppe_port->phylink, ppe_port->np, 0);
+	if (err) {
+		dev_err(ppe_dev->dev, "Failed to connect phylink for port %d\n", port);
+		phylink_destroy(ppe_port->phylink);
+		ppe_port->phylink = NULL;
+		return NULL;
+	}
+
+	return ppe_port->phylink;
+}
+
+static void ppe_phylink_destroy(struct ppe_device *ppe_dev, int port)
+{
+	struct ppe_port *ppe_port = ppe_port_get(ppe_dev, port);
+
+	if (!ppe_port)
+		dev_err(ppe_dev->dev, "Failed to find ppe port %d\n", port);
+
+	if (ppe_port->phylink) {
+		rtnl_lock();
+		phylink_disconnect_phy(ppe_port->phylink);
+		rtnl_unlock();
+		phylink_destroy(ppe_port->phylink);
+		ppe_port->phylink = NULL;
+	}
+}
+
 bool ppe_is_probed(struct platform_device *pdev)
 {
 	struct ppe_device *ppe_dev = platform_get_drvdata(pdev);
@@ -352,6 +1230,12 @@ static int ppe_port_maxframe_set(struct ppe_device *ppe_dev,
 }
 
 static struct ppe_device_ops qcom_ppe_ops = {
+	.phylink_setup = ppe_phylink_setup,
+	.phylink_destroy = ppe_phylink_destroy,
+	.phylink_mac_config = ppe_phylink_mac_config,
+	.phylink_mac_link_up = ppe_phylink_mac_link_up,
+	.phylink_mac_link_down = ppe_phylink_mac_link_down,
+	.phylink_mac_select_pcs = ppe_phylink_mac_select_pcs,
 	.set_maxframe = ppe_port_maxframe_set,
 };
 
@@ -1407,6 +2291,7 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 				     PTR_ERR(ppe_dev->ppe_priv),
 				     "Fail to init ppe data\n");
 
+	mutex_init(&ppe_dev->reg_mutex);
 	platform_set_drvdata(pdev, ppe_dev);
 	ret = ppe_clock_config(pdev);
 	if (ret)
@@ -1426,6 +2311,10 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 				     ret,
 				     "ppe device hw init failed\n");
 
+	ret = ppe_mac_init(pdev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "ppe mac initialization failed\n");
+
 	ppe_dev->uniphy = ppe_uniphy_setup(pdev);
 	if (IS_ERR(ppe_dev->uniphy))
 		return dev_err_probe(&pdev->dev, ret, "ppe uniphy initialization failed\n");
@@ -1440,9 +2329,24 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 static int qcom_ppe_remove(struct platform_device *pdev)
 {
 	struct ppe_device *ppe_dev;
+	struct ppe_ports *ppe_ports;
+	struct ppe_data *ppe_dev_priv;
+	int i, port;
 
 	ppe_dev = platform_get_drvdata(pdev);
+	ppe_dev_priv = ppe_dev->ppe_priv;
+	ppe_ports = (struct ppe_ports *)ppe_dev->ports;
+
 	ppe_debugfs_teardown(ppe_dev);
+
+	for (i = 0; i < ppe_ports->num; i++) {
+		/* Reset ppe port parent clock to XO clock */
+		port = ppe_ports->port[i].port_id;
+		clk_set_rate(ppe_dev_priv->clk[PPE_NSS_PORT1_RX_CLK + ((port - 1) << 1)],
+			     P_XO_CLOCK_RATE);
+		clk_set_rate(ppe_dev_priv->clk[PPE_NSS_PORT1_TX_CLK + ((port - 1) << 1)],
+			     P_XO_CLOCK_RATE);
+	}
 
 	return 0;
 }
