@@ -45,6 +45,109 @@ struct ppe_queue_ucast_dest {
 	int dest_port;
 };
 
+/* bypss_bitmap_0 */
+enum {
+	IN_VLAN_TAG_FMT_CHECK_BYP = 0,
+	IN_VLAN_MEMBER_CHECK_BYP,
+	IN_VLAN_XLT_BYP,
+	MY_MAC_CHECK_BYP,
+	DIP_LOOKUP_BYP,
+	FLOW_LOOKUP_BYP = 5,
+	FLOW_ACTION_BYP,
+	ACL_BYP,
+	FAKE_MAC_HEADER_BYP,
+	SERVICE_CODE_BYP,
+	WRONG_PKT_FMT_L2_BYP = 10,
+	WRONG_PKT_FMT_L3_IPV4_BYP,
+	WRONG_PKT_FMT_L3_IPV6_BYP,
+	WRONG_PKT_FMT_L4_BYP,
+	FLOW_SERVICE_CODE_BYP,
+	ACL_SERVICE_CODE_BYP = 15,
+	FAKE_L2_PROTO_BYP,
+	PPPOE_TERMINATION_BYP,
+	DEFAULT_VLAN_BYP,
+	DEFAULT_PCP_BYP,
+	VSI_ASSIGN_BYP,
+	IN_VLAN_ASSIGN_FAIL_BYP = 24,
+	SOURCE_GUARD_BYP,
+	MRU_MTU_CHECK_BYP,
+	FLOW_SRC_CHECK_BYP,
+	FLOW_QOS_BYP,
+};
+
+/* bypss_bitmap_1 */
+enum {
+	EG_VLAN_MEMBER_CHECK_BYP = 0,
+	EG_VLAN_XLT_BYP,
+	EG_VLAN_TAG_FMT_CTRL_BYP,
+	FDB_LEARN_BYP,
+	FDB_REFRESH_BYP,
+	L2_SOURCE_SEC_BYP = 5,
+	MANAGEMENT_FWD_BYP,
+	BRIDGING_FWD_BYP,
+	IN_STP_FLTR_BYP,
+	EG_STP_FLTR_BYP,
+	SOURCE_FLTR_BYP = 10,
+	POLICER_BYP,
+	L2_PKT_EDIT_BYP,
+	L3_PKT_EDIT_BYP,
+	ACL_POST_ROUTING_CHECK_BYP,
+	PORT_ISOLATION_BYP = 15,
+	PRE_ACL_QOS_BYP,
+	POST_ACL_QOS_BYP,
+	DSCP_QOS_BYP,
+	PCP_QOS_BYP,
+	PREHEADER_QOS_BYP = 20,
+	FAKE_MAC_DROP_BYP,
+	TUNL_CONTEXT_BYP,
+	FLOW_POLICER_BYP,
+};
+
+/* bypss_bitmap_2 */
+enum {
+	RX_VLAN_COUNTER_BYP = 0,
+	RX_COUNTER_BYP,
+	TX_VLAN_COUNTER_BYP,
+	TX_COUNTER_BYP,
+};
+
+/* bypass_bitmap_3 */
+enum {
+	TL_SERVICE_CODE_BYP = 0,
+	TL_BYP,
+	TL_L3_IF_CHECK_BYP,
+	TL_VLAN_CHECK_BYP,
+	TL_DMAC_CHECK_BYP,
+	TL_UDP_CSUM_0_CHECK_BYP = 5,
+	TL_TBL_DE_ACCE_CHECK_BYP,
+	TL_PPPOE_MC_TERM_CHECK_BYP,
+	TL_TTL_EXCEED_CHECK_BYP,
+	TL_MAP_SRC_CHECK_BYP,
+	TL_MAP_DST_CHECK_BYP = 10,
+	TL_LPM_DST_LOOKUP_BYP,
+	TL_LPM_LOOKUP_BYP,
+	TL_WRONG_PKT_FMT_L2_BYP,
+	TL_WRONG_PKT_FMT_L3_IPV4_BYP,
+	TL_WRONG_PKT_FMT_L3_IPV6_BYP = 15,
+	TL_WRONG_PKT_FMT_L4_BYP,
+	TL_WRONG_PKT_FMT_TUNNEL_BYP,
+	TL_PRE_IPO_BYP = 20,
+};
+
+/* PPE service code is used to bypass hardware handler when the packet pass
+ * through PPE, the supported service code number is 256.
+ */
+struct ppe_servcode_cfg {
+	bool dest_port_valid;
+	int dest_port;
+	u32 bypass_bitmap[4];
+	bool is_src;
+	int field_update_bitmap;
+	int next_service_code;
+	int hw_service;
+	int offset_sel;
+};
+
 /* The operations are used to configure the PPE queue related resource */
 struct ppe_queue_ops {
 	int (*queue_scheduler_set)(struct ppe_device *ppe_dev,
@@ -76,4 +179,8 @@ struct ppe_queue_ops {
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void);
+
+int ppe_servcode_config_set(struct ppe_device *ppe_dev,
+			    int servcode,
+			    struct ppe_servcode_cfg cfg);
 #endif

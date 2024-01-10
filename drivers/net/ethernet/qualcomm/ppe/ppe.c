@@ -1104,9 +1104,29 @@ static int ppe_qm_init(struct ppe_device *ppe_dev)
 	return 0;
 }
 
+static int ppe_servcode_init(struct ppe_device *ppe_dev)
+{
+	struct ppe_servcode_cfg servcode_cfg;
+
+	memset(&servcode_cfg, 0, sizeof(servcode_cfg));
+	servcode_cfg.bypass_bitmap[0] = (u32)(~(BIT(FAKE_MAC_HEADER_BYP) |
+					BIT(SERVICE_CODE_BYP) |
+					BIT(FAKE_L2_PROTO_BYP)));
+	servcode_cfg.bypass_bitmap[1] = (u32)(~(BIT(ACL_POST_ROUTING_CHECK_BYP)));
+
+	/* The default service code used by CPU port */
+	return ppe_servcode_config_set(ppe_dev, 1, servcode_cfg);
+}
+
 static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 {
-	return ppe_qm_init(ppe_dev);
+	int ret;
+
+	ret = ppe_qm_init(ppe_dev);
+	if (ret)
+		return ret;
+
+	return ppe_servcode_init(ppe_dev);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
