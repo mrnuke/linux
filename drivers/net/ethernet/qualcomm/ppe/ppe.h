@@ -11,6 +11,16 @@
 #include <linux/clk.h>
 #include <linux/reset.h>
 
+/* PPE Ports */
+#define PPE_PORT0		0
+#define PPE_PORT1		1
+#define PPE_PORT2		2
+#define PPE_PORT3		3
+#define PPE_PORT4		4
+#define PPE_PORT5		5
+#define PPE_PORT6		6
+#define PPE_PORT7		7
+
 enum ppe_clk_id {
 	/* clocks for CMN PLL */
 	PPE_CMN_AHB_CLK,

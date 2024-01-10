@@ -1260,6 +1260,80 @@ static int ppe_rss_hash_init(struct ppe_device *ppe_dev)
 						  hash_cfg);
 }
 
+static int ppe_bridge_init(struct ppe_device *ppe_dev)
+{
+	union ppe_l2_vp_port_tbl_u port_tbl;
+	union ppe_vsi_tbl_u vsi_tbl;
+	u32 reg_val = 0;
+	int i = 0;
+
+	/* CPU port0 initialization */
+	reg_val = FIELD_PREP(PPE_PORT_BRIDGE_CTRL_ISOLATION_BITMAP, 0x7F) |
+			PPE_PORT_BRIDGE_CTRL_PROMISC_EN;
+	ppe_mask(ppe_dev,
+		 PPE_PORT_BRIDGE_CTRL + PPE_PORT_BRIDGE_CTRL_INC * PPE_PORT0,
+		 PPE_PORT_BRIDGE_CTRL_MASK,
+		 reg_val | PPE_PORT_BRIDGE_CTRL_TXMAC_EN);
+
+	/* Physical and virtual physical port initialization */
+	reg_val |= (PPE_PORT_BRIDGE_CTRL_STATION_MODE_LRN_EN |
+			PPE_PORT_BRIDGE_CTRL_NEW_ADDR_LRN_EN);
+	for (i = PPE_PORT1; i <= PPE_PORT6; i++) {
+		ppe_mask(ppe_dev,
+			 PPE_PORT_BRIDGE_CTRL + PPE_PORT_BRIDGE_CTRL_INC * i,
+			 PPE_PORT_BRIDGE_CTRL_MASK,
+			 reg_val);
+
+		/* Invalid vsi fowarding to CPU port0 */
+		memset(&port_tbl, 0, sizeof(port_tbl));
+		ppe_read_tbl(ppe_dev,
+			     PPE_L2_VP_PORT_TBL + PPE_L2_VP_PORT_TBL_INC * i,
+			     port_tbl.val,
+			     sizeof(port_tbl.val));
+		port_tbl.bf.invalid_vsi_forwarding_en = true;
+		port_tbl.bf.dst_info = PPE_PORT0;
+		ppe_write_tbl(ppe_dev,
+			      PPE_L2_VP_PORT_TBL + PPE_L2_VP_PORT_TBL_INC * i,
+			      port_tbl.val,
+			      sizeof(port_tbl.val));
+	}
+
+	/* Internal port7 initialization */
+	ppe_mask(ppe_dev,
+		 PPE_PORT_BRIDGE_CTRL + PPE_PORT_BRIDGE_CTRL_INC * PPE_PORT7,
+		 PPE_PORT_BRIDGE_CTRL_MASK,
+		 reg_val | PPE_PORT_BRIDGE_CTRL_TXMAC_EN);
+
+	/* Enable Global L2 Learn and Ageing */
+	ppe_mask(ppe_dev,
+		 PPE_L2_GLOBAL_CONFIG,
+		 PPE_L2_GLOBAL_CONFIG_LRN_EN | PPE_L2_GLOBAL_CONFIG_AGE_EN,
+		 PPE_L2_GLOBAL_CONFIG_LRN_EN | PPE_L2_GLOBAL_CONFIG_AGE_EN);
+
+	/* Vsi initialization */
+	for (i = 0; i < PPE_VSI_TBL_NUM; i++) {
+		memset(&vsi_tbl, 0, sizeof(vsi_tbl));
+		ppe_read_tbl(ppe_dev,
+			     PPE_VSI_TBL + PPE_VSI_TBL_INC * i,
+			     vsi_tbl.val,
+			     sizeof(vsi_tbl.val));
+		vsi_tbl.bf.member_port_bitmap = BIT(PPE_PORT0);
+		vsi_tbl.bf.uuc_bitmap = BIT(PPE_PORT0);
+		vsi_tbl.bf.umc_bitmap = BIT(PPE_PORT0);
+		vsi_tbl.bf.bc_bitmap = BIT(PPE_PORT0);
+		vsi_tbl.bf.new_addr_lrn_en = true;
+		vsi_tbl.bf.new_addr_fwd_cmd = 0;
+		vsi_tbl.bf.station_move_lrn_en = true;
+		vsi_tbl.bf.station_move_fwd_cmd = 0;
+		ppe_write_tbl(ppe_dev,
+			      PPE_VSI_TBL + PPE_VSI_TBL_INC * i,
+			      vsi_tbl.val,
+			      sizeof(vsi_tbl.val));
+	}
+
+	return 0;
+}
+
 static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 {
 	int ret;
@@ -1273,6 +1347,10 @@ static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 		return ret;
 
 	ret = ppe_port_ctrl_init(ppe_dev);
+	if (ret)
+		return ret;
+
+	ret = ppe_bridge_init(ppe_dev);
 	if (ret)
 		return ret;
 

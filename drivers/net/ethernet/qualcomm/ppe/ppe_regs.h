@@ -238,12 +238,67 @@ union ppe_eg_service_cfg_u {
 #define PPE_TX_BUFF_THRSH_XOFF					GENMASK(7, 0)
 #define PPE_TX_BUFF_THRSH_XON					GENMASK(15, 8)
 
+#define PPE_L2_GLOBAL_CONFIG					0x60038
+#define PPE_L2_GLOBAL_CONFIG_LRN_EN				BIT(6)
+#define PPE_L2_GLOBAL_CONFIG_AGE_EN				BIT(7)
+
+#define PPE_MIRROR_ANALYZER					0x60040
+#define PPE_MIRROR_ANALYZER_NUM					1
+#define PPE_MIRROR_ANALYZER_INC					4
+#define PPE_MIRROR_ANALYZER_INGRESS_PORT			GENMASK(5, 0)
+#define PPE_MIRROR_ANALYZER_EGRESS_PORT				GENMASK(13, 8)
+
+#define PPE_PORT_BRIDGE_CTRL					0x60300
+#define PPE_PORT_BRIDGE_CTRL_NUM				8
+#define PPE_PORT_BRIDGE_CTRL_INC				4
+#define PPE_PORT_BRIDGE_CTRL_NEW_ADDR_LRN_EN			BIT(0)
+#define PPE_PORT_BRIDGE_CTRL_NEW_ADDR_FWD_CMD			GENMASK(2, 1)
+#define PPE_PORT_BRIDGE_CTRL_STATION_MODE_LRN_EN		BIT(3)
+#define PPE_PORT_BRIDGE_CTRL_STATION_MODE_FWD_CMD		GENMASK(5, 4)
+#define PPE_PORT_BRIDGE_CTRL_ISOLATION_BITMAP			GENMASK(15, 8)
+#define PPE_PORT_BRIDGE_CTRL_TXMAC_EN				BIT(16)
+#define PPE_PORT_BRIDGE_CTRL_PROMISC_EN				BIT(17)
+#define PPE_PORT_BRIDGE_CTRL_MASK				GENMASK(17, 0)
+
+#define PPE_PORT_MIRROR						0x60800
+#define PPE_PORT_MIRROR_NUM					8
+#define PPE_PORT_MIRROR_INC					4
+#define PPE_PORT_MIRROR_INGRESS_EN				BIT(0)
+#define PPE_PORT_MIRROR_EGRESS_EN				BIT(1)
+
+#define PPE_CST_STATE						0x60100
+#define PPE_CST_STATE_NUM					8
+#define PPE_CST_STATE_INC					4
+#define PPE_CST_STATE_PORT_STATE				GENMASK(1, 0)
+
 #define PPE_MC_MTU_CTRL_TBL					0x60a00
 #define PPE_MC_MTU_CTRL_TBL_NUM					8
 #define PPE_MC_MTU_CTRL_TBL_INC					4
 #define PPE_MC_MTU_CTRL_TBL_MTU					GENMASK(13, 0)
 #define PPE_MC_MTU_CTRL_TBL_MTU_CMD				GENMASK(15, 14)
 #define PPE_MC_MTU_CTRL_TBL_TX_CNT_EN				BIT(16)
+
+#define PPE_VSI_TBL						0x63800
+#define PPE_VSI_TBL_NUM						64
+#define PPE_VSI_TBL_INC						0x10
+
+/* PPE vsi configurations */
+struct ppe_vsi_tbl {
+	u32 member_port_bitmap:8,
+	    uuc_bitmap:8,
+	    umc_bitmap:8,
+	    bc_bitmap:8;
+	u32 new_addr_lrn_en:1,
+	    new_addr_fwd_cmd:2,
+	    station_move_lrn_en:1,
+	    station_move_fwd_cmd:2,
+	    res0:26;
+};
+
+union ppe_vsi_tbl_u {
+	u32 val[2];
+	struct ppe_vsi_tbl bf;
+};
 
 #define PPE_MRU_MTU_CTRL_TBL					0x65000
 #define PPE_MRU_MTU_CTRL_TBL_NUM				256
@@ -294,6 +349,53 @@ union ppe_mru_mtu_ctrl_cfg_u {
 #define PPE_IN_L2_SERVICE_TBL_DST_BYPASS_BITMAP			GENMASK(29, 6)
 #define PPE_IN_L2_SERVICE_TBL_RX_CNT_EN				BIT(30)
 #define PPE_IN_L2_SERVICE_TBL_TX_CNT_EN				BIT(31)
+
+#define PPE_L2_VP_PORT_TBL					0x98000
+#define PPE_L2_VP_PORT_TBL_NUM					256
+#define PPE_L2_VP_PORT_TBL_INC					0x10
+
+/* Port configurations */
+struct ppe_l2_vp_port_tbl {
+	u32 invalid_vsi_forwarding_en:1,
+	    promisc_en:1,
+	    dst_info:8,
+	    physical_port:3,
+	    new_addr_lrn_en:1,
+	    new_addr_fwd_cmd:2,
+	    station_move_lrn_en:1,
+	    station_move_fwd_cmd:2,
+	    lrn_lmt_cnt:12,
+	    lrn_lmt_en:1;
+	u32 lrn_lmt_exceed_fwd:2,
+	    eg_vlan_fltr_cmd:1,
+	    port_isolation_bitmap:8,
+	    isol_profile:6,
+	    isol_en:1,
+	    policer_en:1,
+	    policer_index:9,
+	    vp_state_check_en:1,
+	    vp_type:1,
+	    vp_context_active:1,
+	    vp_eg_data_valid:1;
+	u32 physical_port_mtu_check_en:1,
+	    mtu_check_type:1,
+	    extra_header_len:8,
+	    eg_vlan_fmt_valid:1,
+	    eg_stag_fmt:1,
+	    eg_ctag_fmt:1,
+	    exception_fmt_ctrl:1,
+	    enq_service_code_en:1,
+	    enq_service_code:8,
+	    enq_phy_port:3,
+	    app_ctrl_profile_0:6;
+	u32 app_ctrl_profile_1:2,
+	    res0:30;
+};
+
+union ppe_l2_vp_port_tbl_u {
+	u32 val[4];
+	struct ppe_l2_vp_port_tbl bf;
+};
 
 #define PPE_PORT_RX_CNT_TBL					0x150000
 #define PPE_PORT_RX_CNT_TBL_NUM					256
