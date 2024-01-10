@@ -183,6 +183,101 @@ struct ppe_scheduler_port_resource {
 	int l1edrr[2];
 };
 
+/* PPE GMAC statistics */
+struct ppe_gmib_hw_stats {
+	u64 rx_broadcast;
+	u64 rx_pause;
+	u64 rx_multicast;
+	u64 rx_fcserr;
+	u64 rx_alignerr;
+	u64 rx_runt;
+	u64 rx_frag;
+	u64 rx_jmbfcserr;
+	u64 rx_jmbalignerr;
+	u64 rx_pkt64;
+	u64 rx_pkt65to127;
+	u64 rx_pkt128to255;
+	u64 rx_pkt256to511;
+	u64 rx_pkt512to1023;
+	u64 rx_pkt1024to1518;
+	u64 rx_pkt1519tomax;
+	u64 rx_toolong;
+	u64 rx_pktgoodbyte;
+	u64 rx_pktbadbyte;
+	u64 rx_unicast;
+	u64 tx_broadcast;
+	u64 tx_pause;
+	u64 tx_multicast;
+	u64 tx_underrun;
+	u64 tx_pkt64;
+	u64 tx_pkt65to127;
+	u64 tx_pkt128to255;
+	u64 tx_pkt256to511;
+	u64 tx_pkt512to1023;
+	u64 tx_pkt1024to1518;
+	u64 tx_pkt1519tomax;
+	u64 tx_pktbyte;
+	u64 tx_collisions;
+	u64 tx_abortcol;
+	u64 tx_multicol;
+	u64 tx_singlecol;
+	u64 tx_exesdeffer;
+	u64 tx_deffer;
+	u64 tx_latecol;
+	u64 tx_unicast;
+};
+
+/* PPE XGMAC statistics */
+struct ppe_xgmib_hw_stats {
+	u64 tx_bytes;
+	u64 tx_frames;
+	u64 tx_broadcast_g;
+	u64 tx_multicast_g;
+	u64 tx_pkt64;
+	u64 tx_pkt65to127;
+	u64 tx_pkt128to255;
+	u64 tx_pkt256to511;
+	u64 tx_pkt512to1023;
+	u64 tx_pkt1024tomax;
+	u64 tx_unicast;
+	u64 tx_multicast;
+	u64 tx_broadcast;
+	u64 tx_underflow_err;
+	u64 tx_bytes_g;
+	u64 tx_frame_g;
+	u64 tx_pause;
+	u64 tx_vlan_g;
+	u64 tx_lpi_usec;
+	u64 tx_lpi_tran;
+	u64 rx_frames;
+	u64 rx_bytes;
+	u64 rx_bytes_g;
+	u64 rx_broadcast_g;
+	u64 rx_multicast_g;
+	u64 rx_crc_err;
+	u64 rx_runt_err;
+	u64 rx_jabber_err;
+	u64 rx_undersize_g;
+	u64 rx_oversize_g;
+	u64 rx_pkt64;
+	u64 rx_pkt65to127;
+	u64 rx_pkt128to255;
+	u64 rx_pkt256to511;
+	u64 rx_pkt512to1023;
+	u64 rx_pkt1024tomax;
+	u64 rx_unicast_g;
+	u64 rx_len_err;
+	u64 rx_outofrange_err;
+	u64 rx_pause;
+	u64 rx_fifo_overflow;
+	u64 rx_vlan;
+	u64 rx_wdog_err;
+	u64 rx_lpi_usec;
+	u64 rx_lpi_tran;
+	u64 rx_drop_frames;
+	u64 rx_drop_bytes;
+};
+
 /* PPE per port data type to record port settings such as phylink
  * setting, mac type, interface mode and link speed.
  */
@@ -197,6 +292,9 @@ struct ppe_port {
 	int speed;
 	int duplex;
 	int pause;
+	struct delayed_work gmib_read;
+	struct ppe_gmib_hw_stats *gmib_stats;
+	spinlock_t stats_lock; /* Protects gmib stats */
 };
 
 /* PPE ports data type */
