@@ -23,8 +23,70 @@
 #define PPE_BM_TDM_CFG_TBL_SECOND_PORT_VALID			BIT(6)
 #define PPE_BM_TDM_CFG_TBL_SECOND_PORT				GENMASK(11, 8)
 
+#define PPE_SERVICE_TBL						0x15000
+#define PPE_SERVICE_TBL_NUM					256
+#define PPE_SERVICE_TBL_INC					0x10
+#define PPE_SERVICE_TBL_BYPASS_BITMAP				GENMASK(31, 0)
+#define PPE_SERVICE_TBL_RX_COUNTING_EN				BIT(32)
+
+/* service code for the ingress packet, the PPE features can be bypassed
+ * with service config.
+ */
+struct ppe_service_cfg {
+	u32 bypass_bitmap;
+	u32 rx_counting_en:1,
+	    res0:31;
+};
+
+union ppe_service_cfg_u {
+	u32 val[2];
+	struct ppe_service_cfg bf;
+};
+
 #define PPE_EG_BRIDGE_CONFIG					0x20044
 #define PPE_EG_BRIDGE_CONFIG_QUEUE_CNT_EN			BIT(2)
+
+#define PPE_EG_SERVICE_TBL					0x43000
+#define PPE_EG_SERVICE_TBL_NUM					256
+#define PPE_EG_SERVICE_TBL_INC					0x10
+
+/* service code config for the egress packet, the new service code can be
+ * generated and ath header can be configured.
+ */
+struct ppe_eg_service_cfg {
+	u32 field_update_action;
+	u32 next_service_code:8,
+	    hw_services:6,
+	    offset_sel:1,
+	    tx_counting_en:1,
+	    ip_length_update:1,
+	    ath_hdr_insert_dis:1,
+	    ath_hdr_type:3,
+	    ath_from_cpu:1,
+	    ath_disable_bit:1,
+	    ath_port_bitmap:7,
+	    res0:2;
+};
+
+union ppe_eg_service_cfg_u {
+	u32 val[2];
+	struct ppe_eg_service_cfg bf;
+};
+
+#define PPE_IN_L2_SERVICE_TBL					0x66000
+#define PPE_IN_L2_SERVICE_TBL_NUM				256
+#define PPE_IN_L2_SERVICE_TBL_INC				0x10
+#define PPE_IN_L2_SERVICE_TBL_DST_PORT_ID_VALID			BIT(0)
+#define PPE_IN_L2_SERVICE_TBL_DST_PORT_ID			GENMASK(4, 1)
+#define PPE_IN_L2_SERVICE_TBL_DST_DIRECTION			BIT(5)
+#define PPE_IN_L2_SERVICE_TBL_DST_BYPASS_BITMAP			GENMASK(29, 6)
+#define PPE_IN_L2_SERVICE_TBL_RX_CNT_EN				BIT(30)
+#define PPE_IN_L2_SERVICE_TBL_TX_CNT_EN				BIT(31)
+
+#define PPE_TL_SERVICE_TBL					0x306000
+#define PPE_TL_SERVICE_TBL_NUM					256
+#define PPE_TL_SERVICE_TBL_INC					4
+#define PPE_TL_SERVICE_TBL_BYPASS_BITMAP			GENMASK(31, 0)
 
 #define PPE_PSCH_TDM_DEPTH_CFG					0x400000
 #define PPE_PSCH_TDM_DEPTH_CFG_NUM				1

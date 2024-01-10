@@ -269,6 +269,48 @@ static int ppe_queue_ucast_hash_class_set(struct ppe_device *ppe_dev,
 			 reg_val);
 }
 
+int ppe_servcode_config_set(struct ppe_device *ppe_dev,
+			    int servcode,
+			    struct ppe_servcode_cfg cfg)
+{
+	union ppe_eg_service_cfg_u eg_service_cfg;
+	union ppe_service_cfg_u service_cfg;
+	int val;
+
+	memset(&service_cfg, 0, sizeof(service_cfg));
+	memset(&eg_service_cfg, 0, sizeof(eg_service_cfg));
+
+	val = FIELD_PREP(PPE_IN_L2_SERVICE_TBL_DST_PORT_ID_VALID, cfg.dest_port_valid) |
+		FIELD_PREP(PPE_IN_L2_SERVICE_TBL_DST_PORT_ID, cfg.dest_port) |
+		FIELD_PREP(PPE_IN_L2_SERVICE_TBL_DST_DIRECTION, cfg.is_src) |
+		FIELD_PREP(PPE_IN_L2_SERVICE_TBL_DST_BYPASS_BITMAP, cfg.bypass_bitmap[1]) |
+		FIELD_PREP(PPE_IN_L2_SERVICE_TBL_RX_CNT_EN,
+			   cfg.bypass_bitmap[2] & BIT(1) ? 1 : 0) |
+		FIELD_PREP(PPE_IN_L2_SERVICE_TBL_TX_CNT_EN,
+			   cfg.bypass_bitmap[2] & BIT(3) ? 1 : 0);
+	ppe_write(ppe_dev, PPE_IN_L2_SERVICE_TBL + PPE_IN_L2_SERVICE_TBL_INC * servcode, val);
+
+	ppe_read_tbl(ppe_dev, PPE_SERVICE_TBL + PPE_SERVICE_TBL_INC * servcode,
+		     service_cfg.val, sizeof(service_cfg.val));
+	service_cfg.bf.bypass_bitmap = cfg.bypass_bitmap[0];
+	service_cfg.bf.rx_counting_en = cfg.bypass_bitmap[2] & BIT(0);
+	ppe_write_tbl(ppe_dev, PPE_SERVICE_TBL + PPE_SERVICE_TBL_INC * servcode,
+		      service_cfg.val, sizeof(service_cfg.val));
+
+	ppe_read_tbl(ppe_dev, PPE_EG_SERVICE_TBL + PPE_EG_SERVICE_TBL_INC * servcode,
+		     eg_service_cfg.val, sizeof(eg_service_cfg.val));
+	eg_service_cfg.bf.field_update_action = cfg.field_update_bitmap;
+	eg_service_cfg.bf.next_service_code = cfg.next_service_code;
+	eg_service_cfg.bf.hw_services = cfg.hw_service;
+	eg_service_cfg.bf.offset_sel = cfg.offset_sel;
+	eg_service_cfg.bf.tx_counting_en = cfg.bypass_bitmap[2] & BIT(2) ? 1 : 0;
+	ppe_write_tbl(ppe_dev, PPE_EG_SERVICE_TBL + PPE_EG_SERVICE_TBL_INC * servcode,
+		      eg_service_cfg.val, sizeof(eg_service_cfg.val));
+
+	val = FIELD_PREP(PPE_TL_SERVICE_TBL_BYPASS_BITMAP, cfg.bypass_bitmap[3]);
+	return ppe_write(ppe_dev, PPE_TL_SERVICE_TBL + PPE_TL_SERVICE_TBL_INC * servcode, val);
+}
+
 static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_scheduler_set = ppe_queue_scheduler_set,
 	.queue_scheduler_get = ppe_queue_scheduler_get,
