@@ -333,6 +333,102 @@ int ppe_counter_set(struct ppe_device *ppe_dev, int port, bool enable)
 			FIELD_PREP(PPE_PORT_EG_VLAN_TX_COUNTING_EN, enable));
 }
 
+static int ppe_rss_hash_config_set(struct ppe_device *ppe_dev,
+				   int mode,
+				   struct ppe_rss_hash_cfg cfg)
+{
+	u32 val;
+	int i;
+
+	if (mode & PPE_RSS_HASH_MODE_IPV4) {
+		val = FIELD_PREP(PPE_RSS_HASH_MASK_IPV4_HASH_MASK, cfg.hash_mask) |
+				 FIELD_PREP(PPE_RSS_HASH_MASK_IPV4_FRAGMENT,
+					    cfg.hash_fragment_mode);
+		ppe_write(ppe_dev, PPE_RSS_HASH_MASK_IPV4, val);
+
+		val = FIELD_PREP(PPE_RSS_HASH_SEED_IPV4_VAL, cfg.hash_seed);
+		ppe_write(ppe_dev, PPE_RSS_HASH_SEED_IPV4, val);
+
+		for (i = 0; i < PPE_RSS_HASH_MIX_IPV4_NUM; i++) {
+			switch (i) {
+			case 0:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_IPV4_VAL,
+						 cfg.hash_sip_mix[0]);
+				break;
+			case 1:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_IPV4_VAL,
+						 cfg.hash_dip_mix[0]);
+				break;
+			case 2:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_IPV4_VAL,
+						 cfg.hash_protocol_mix);
+				break;
+			case 3:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_IPV4_VAL,
+						 cfg.hash_dport_mix);
+				break;
+			case 4:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_IPV4_VAL,
+						 cfg.hash_sport_mix);
+				break;
+			default:
+				break;
+			}
+			ppe_write(ppe_dev, PPE_RSS_HASH_MIX_IPV4 + i * PPE_RSS_HASH_MIX_IPV4_INC,
+				  val);
+		}
+
+		for (i = 0; i < PPE_RSS_HASH_MIX_IPV4_NUM; i++) {
+			val = FIELD_PREP(PPE_RSS_HASH_FIN_IPV4_INNER, cfg.hash_fin_inner[i]) |
+					 FIELD_PREP(PPE_RSS_HASH_FIN_IPV4_OUTER,
+						    cfg.hash_fin_outer[i]);
+			ppe_write(ppe_dev, PPE_RSS_HASH_FIN_IPV4 + i * PPE_RSS_HASH_FIN_IPV4_INC,
+				  val);
+		}
+	}
+
+	if (mode & PPE_RSS_HASH_MODE_IPV6) {
+		val = FIELD_PREP(PPE_RSS_HASH_MASK_HASH_MASK, cfg.hash_mask) |
+				 FIELD_PREP(PPE_RSS_HASH_MASK_FRAGMENT, cfg.hash_fragment_mode);
+		ppe_write(ppe_dev, PPE_RSS_HASH_MASK, val);
+
+		val = FIELD_PREP(PPE_RSS_HASH_SEED_VAL, cfg.hash_seed);
+		ppe_write(ppe_dev, PPE_RSS_HASH_SEED, val);
+
+		for (i = 0; i < PPE_RSS_HASH_MIX_NUM; i++) {
+			switch (i) {
+			case 0 ... 3:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_VAL, cfg.hash_sip_mix[i]);
+				break;
+			case 4 ... 7:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_VAL, cfg.hash_dip_mix[i - 4]);
+				break;
+			case 8:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_VAL, cfg.hash_protocol_mix);
+				break;
+			case 9:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_VAL, cfg.hash_dport_mix);
+				break;
+			case 10:
+				val = FIELD_PREP(PPE_RSS_HASH_MIX_VAL, cfg.hash_sport_mix);
+				break;
+			default:
+				break;
+			}
+			ppe_write(ppe_dev, PPE_RSS_HASH_MIX + i * PPE_RSS_HASH_MIX_INC, val);
+		}
+
+		for (i = 0; i < PPE_RSS_HASH_FIN_NUM; i++) {
+			val = FIELD_PREP(PPE_RSS_HASH_FIN_INNER, cfg.hash_fin_inner[i]) |
+					 FIELD_PREP(PPE_RSS_HASH_FIN_OUTER, cfg.hash_fin_outer[i]);
+
+			ppe_write(ppe_dev, PPE_RSS_HASH_FIN + i * PPE_RSS_HASH_FIN_INC, val);
+		}
+	}
+
+	return 0;
+}
+
 static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_scheduler_set = ppe_queue_scheduler_set,
 	.queue_scheduler_get = ppe_queue_scheduler_get,
@@ -340,6 +436,7 @@ static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_ucast_base_get = ppe_queue_ucast_base_get,
 	.queue_ucast_pri_class_set = ppe_queue_ucast_pri_class_set,
 	.queue_ucast_hash_class_set = ppe_queue_ucast_hash_class_set,
+	.rss_hash_config_set = ppe_rss_hash_config_set,
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void)

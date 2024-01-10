@@ -12,6 +12,8 @@
 
 #define PPE_QUEUE_PRI_MAX		16
 #define PPE_QUEUE_HASH_MAX		256
+#define PPE_RSS_HASH_MODE_IPV4		BIT(0)
+#define PPE_RSS_HASH_MODE_IPV6		BIT(1)
 
 /* PPE hardware QoS configurations used to dispatch the packet passed
  * through PPE, the scheduler supports DRR(deficit round robin with the
@@ -148,6 +150,23 @@ struct ppe_servcode_cfg {
 	int offset_sel;
 };
 
+/* PPE RSS hash can be configured to generate the hash value based on
+ * 5 tuples of packet, the generated hash value is used to decides the
+ * final queue ID.
+ */
+struct ppe_rss_hash_cfg {
+	u32 hash_mask;
+	bool hash_fragment_mode;
+	u32 hash_seed;
+	u8 hash_sip_mix[4];
+	u8 hash_dip_mix[4];
+	u8 hash_protocol_mix;
+	u8 hash_sport_mix;
+	u8 hash_dport_mix;
+	u8 hash_fin_inner[5];
+	u8 hash_fin_outer[5];
+};
+
 /* The operations are used to configure the PPE queue related resource */
 struct ppe_queue_ops {
 	int (*queue_scheduler_set)(struct ppe_device *ppe_dev,
@@ -176,6 +195,9 @@ struct ppe_queue_ops {
 					  int profile_id,
 					  int rss_hash,
 					  int class_offset);
+	int (*rss_hash_config_set)(struct ppe_device *ppe_dev,
+				   int mode,
+				   struct ppe_rss_hash_cfg hash_cfg);
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void);

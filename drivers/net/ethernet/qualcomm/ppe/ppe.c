@@ -1172,6 +1172,53 @@ static int ppe_port_ctrl_init(struct ppe_device *ppe_dev)
 	return 0;
 }
 
+static int ppe_rss_hash_init(struct ppe_device *ppe_dev)
+{
+	const struct ppe_queue_ops *ppe_queue_ops;
+	struct ppe_rss_hash_cfg hash_cfg;
+	int i, ret;
+	u16 fins[5] = {0x205, 0x264, 0x227, 0x245, 0x201};
+	u8 ips[4] = {0x13, 0xb, 0x13, 0xb};
+
+	ppe_queue_ops = ppe_queue_config_ops_get();
+	if (!ppe_queue_ops->rss_hash_config_set)
+		return -EINVAL;
+
+	hash_cfg.hash_seed = get_random_u32();
+	hash_cfg.hash_mask = 0xfff;
+	hash_cfg.hash_fragment_mode = false;
+
+	i = 0;
+	while (i < ARRAY_SIZE(fins)) {
+		hash_cfg.hash_fin_inner[i] = fins[i] & 0x1f;
+		hash_cfg.hash_fin_outer[i] = fins[i] >> 5;
+		i++;
+	}
+
+	hash_cfg.hash_protocol_mix = 0x13;
+	hash_cfg.hash_dport_mix = 0xb;
+	hash_cfg.hash_sport_mix = 0x13;
+	hash_cfg.hash_sip_mix[0] = 0x13;
+	hash_cfg.hash_dip_mix[0] = 0xb;
+
+	ret = ppe_queue_ops->rss_hash_config_set(ppe_dev,
+						 PPE_RSS_HASH_MODE_IPV4,
+						 hash_cfg);
+	if (ret)
+		return ret;
+
+	i = 0;
+	while (i < ARRAY_SIZE(ips)) {
+		hash_cfg.hash_sip_mix[i] = ips[i];
+		hash_cfg.hash_dip_mix[i] = ips[i];
+		i++;
+	}
+
+	return ppe_queue_ops->rss_hash_config_set(ppe_dev,
+						  PPE_RSS_HASH_MODE_IPV6,
+						  hash_cfg);
+}
+
 static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 {
 	int ret;
@@ -1184,7 +1231,11 @@ static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
 	if (ret)
 		return ret;
 
-	return ppe_port_ctrl_init(ppe_dev);
+	ret = ppe_port_ctrl_init(ppe_dev);
+	if (ret)
+		return ret;
+
+	return ppe_rss_hash_init(ppe_dev);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
