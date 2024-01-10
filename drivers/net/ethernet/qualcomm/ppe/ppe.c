@@ -1017,6 +1017,98 @@ static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 	return of_parse_ppe_scheduler(ppe_dev, ppe_node);
 }
 
+static int ppe_qm_init(struct ppe_device *ppe_dev)
+{
+	const struct ppe_queue_ops *ppe_queue_ops;
+	struct ppe_queue_ucast_dest queue_dst;
+	int profile_id, priority, res, class;
+
+	ppe_queue_ops = ppe_queue_config_ops_get();
+
+	/* Initialize the PPE queue base ID and queue priority for each
+	 * physical port, the egress queue ID is decided by the queue
+	 * base ID added by the queue priority class and RSS hash class.
+	 *
+	 * Each physical port has the independent profile ID, so that
+	 * each physical port can be configured with the independent
+	 * queue base and queue priority class and RSS hash class.
+	 */
+	profile_id = 0;
+	while (profile_id < PPE_SCHEDULER_PORT_NUM) {
+		memset(&queue_dst, 0, sizeof(queue_dst));
+
+		/* The device tree property of queue-config is as below,
+		 * <queue_base queue_num group prealloc ceil weight
+		 * resume_off dynamic>;
+		 */
+		res = ppe_scheduler_res[profile_id].ucastq[0];
+		queue_dst.dest_port = profile_id;
+
+		/* Configure queue base ID and profile ID that is same as
+		 * physical port ID.
+		 */
+		if (ppe_queue_ops->queue_ucast_base_set)
+			ppe_queue_ops->queue_ucast_base_set(ppe_dev,
+							    queue_dst,
+							    res,
+							    profile_id);
+
+		/* Queue maximum priority supported by each phiscal port */
+		res = ppe_scheduler_res[profile_id].l0cdrr[1] -
+		      ppe_scheduler_res[profile_id].l0cdrr[0];
+
+		priority = 0;
+		while (priority < PPE_QUEUE_PRI_MAX) {
+			if (priority > res)
+				class = res;
+			else
+				class = priority;
+
+			if (ppe_queue_ops->queue_ucast_pri_class_set)
+				ppe_queue_ops->queue_ucast_pri_class_set(ppe_dev,
+									 profile_id,
+									 priority,
+									 class);
+			priority++;
+		}
+
+		/* Configure the queue RSS hash class value as 0 by default,
+		 * which can be configured as the value same as the ARM CPU
+		 * core number to distribute traffic for the traffic load balance.
+		 */
+		priority = 0;
+		while (priority < PPE_QUEUE_HASH_MAX) {
+			if (ppe_queue_ops->queue_ucast_hash_class_set)
+				ppe_queue_ops->queue_ucast_hash_class_set(ppe_dev,
+									  profile_id,
+									  priority,
+									  0);
+			priority++;
+		}
+
+		profile_id++;
+	}
+
+	/* Redirect ARP reply packet with the max priority on CPU port, which
+	 * keeps the ARP reply with highest priority received by EDMA when
+	 * there is heavy traffic.
+	 */
+	memset(&queue_dst, 0, sizeof(queue_dst));
+	queue_dst.cpu_code_en = true;
+	queue_dst.cpu_code = 101;
+	res = ppe_scheduler_res[0].ucastq[0];
+	priority = ppe_scheduler_res[0].l0cdrr[1] - ppe_scheduler_res[0].l0cdrr[0];
+	if (ppe_queue_ops->queue_ucast_base_set)
+		ppe_queue_ops->queue_ucast_base_set(ppe_dev, queue_dst, res, priority);
+
+	return 0;
+}
+
+static int ppe_dev_hw_init(struct ppe_device *ppe_dev)
+{
+	return ppe_qm_init(ppe_dev);
+}
+
 static int qcom_ppe_probe(struct platform_device *pdev)
 {
 	struct ppe_device *ppe_dev;
@@ -1058,6 +1150,12 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev,
 				     ret,
 				     "of parse ppe failed\n");
+
+	ret = ppe_dev_hw_init(ppe_dev);
+	if (ret)
+		return dev_err_probe(&pdev->dev,
+				     ret,
+				     "ppe device hw init failed\n");
 
 	ppe_dev->is_ppe_probed = true;
 	return 0;

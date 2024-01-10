@@ -194,9 +194,88 @@ static int ppe_queue_scheduler_get(struct ppe_device *ppe_dev,
 		return -EINVAL;
 }
 
+static int ppe_queue_ucast_base_set(struct ppe_device *ppe_dev,
+				    struct ppe_queue_ucast_dest queue_dst,
+				    int queue_base, int profile_id)
+{
+	u32 reg_val;
+	int index;
+
+	if (queue_dst.service_code_en)
+		index = 2048 + (queue_dst.src_profile << 8) + queue_dst.service_code;
+	else if (queue_dst.cpu_code_en)
+		index = 1024 + (queue_dst.src_profile << 8) + queue_dst.cpu_code;
+	else
+		index = (queue_dst.src_profile << 8) + queue_dst.dest_port;
+
+	reg_val = FIELD_PREP(PPE_UCAST_QUEUE_MAP_TBL_PROFILE_ID, profile_id) |
+		  FIELD_PREP(PPE_UCAST_QUEUE_MAP_TBL_QUEUE_ID, queue_base);
+
+	return ppe_write(ppe_dev, PPE_UCAST_QUEUE_MAP_TBL + index * PPE_UCAST_QUEUE_MAP_TBL_INC,
+			 reg_val);
+}
+
+static  int ppe_queue_ucast_base_get(struct ppe_device *ppe_dev,
+				     struct ppe_queue_ucast_dest queue_dst,
+				     int *queue_base, int *profile_id)
+{
+	u32 reg_val;
+	int index;
+
+	if (queue_dst.service_code_en)
+		index = 2048 + (queue_dst.src_profile << 8) + queue_dst.service_code;
+	else if (queue_dst.cpu_code_en)
+		index = 1024 + (queue_dst.src_profile << 8) + queue_dst.cpu_code;
+	else
+		index = (queue_dst.src_profile << 8) + queue_dst.dest_port;
+
+	ppe_read(ppe_dev, PPE_UCAST_QUEUE_MAP_TBL + index * PPE_UCAST_QUEUE_MAP_TBL_INC, &reg_val);
+
+	*queue_base = FIELD_GET(PPE_UCAST_QUEUE_MAP_TBL_QUEUE_ID, reg_val);
+	*profile_id = FIELD_GET(PPE_UCAST_QUEUE_MAP_TBL_PROFILE_ID, reg_val);
+
+	return 0;
+}
+
+static int ppe_queue_ucast_pri_class_set(struct ppe_device *ppe_dev,
+					 int profile_id,
+					 int priority,
+					 int class_offset)
+{
+	u32 reg_val;
+	int index;
+
+	index = (profile_id << 4) + priority;
+	reg_val = FIELD_PREP(PPE_UCAST_PRIORITY_MAP_TBL_CLASS, class_offset);
+
+	return ppe_write(ppe_dev,
+			 PPE_UCAST_PRIORITY_MAP_TBL + index * PPE_UCAST_PRIORITY_MAP_TBL_INC,
+			 reg_val);
+}
+
+static int ppe_queue_ucast_hash_class_set(struct ppe_device *ppe_dev,
+					  int profile_id,
+					  int rss_hash,
+					  int class_offset)
+{
+	u32 reg_val;
+	int index;
+
+	index = (profile_id << 4) + rss_hash;
+	reg_val = FIELD_PREP(PPE_UCAST_HASH_MAP_TBL_HASH, class_offset);
+
+	return ppe_write(ppe_dev,
+			 PPE_UCAST_HASH_MAP_TBL + index * PPE_UCAST_HASH_MAP_TBL_INC,
+			 reg_val);
+}
+
 static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_scheduler_set = ppe_queue_scheduler_set,
 	.queue_scheduler_get = ppe_queue_scheduler_get,
+	.queue_ucast_base_set = ppe_queue_ucast_base_set,
+	.queue_ucast_base_get = ppe_queue_ucast_base_get,
+	.queue_ucast_pri_class_set = ppe_queue_ucast_pri_class_set,
+	.queue_ucast_hash_class_set = ppe_queue_ucast_hash_class_set,
 };
 
 const struct ppe_queue_ops *ppe_queue_config_ops_get(void)
