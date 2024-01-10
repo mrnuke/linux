@@ -625,6 +625,111 @@ parse_qm_err:
 	return ret;
 }
 
+static int of_parse_ppe_tdm(struct ppe_device *ppe_dev,
+			    struct device_node *ppe_node)
+{
+	struct device_node *tdm_node;
+	u32 *cfg, reg_val;
+	int ret, cnt;
+
+	tdm_node = of_get_child_by_name(ppe_node, "tdm-config");
+	if (!tdm_node)
+		return dev_err_probe(ppe_dev->dev, -ENODEV,
+				     "tdm-config is not defined\n");
+
+	cnt = of_property_count_u32_elems(tdm_node, "qcom,tdm-bm-config");
+	if (cnt < 0)
+		return dev_err_probe(ppe_dev->dev, -EINVAL,
+				     "Fail to get qcom,tdm-bm-config\n");
+
+	cfg = kmalloc_array(cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg)
+		return -ENOMEM;
+
+	ret = of_property_read_u32_array(tdm_node, "qcom,tdm-bm-config", cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,tdm-bm-config\n");
+		goto parse_tdm_err;
+	}
+
+	/* Parse TDM BM configuration,
+	 * the dts property:
+	 * qcom,tdm-bm-config = <valid dir port second_valid second_port>;
+	 *
+	 * This config decides the number ticks available for physical port
+	 * to utilize buffer for receiving and transmiting packet.
+	 */
+	reg_val = FIELD_PREP(PPE_BM_TDM_CTRL_TDM_DEPTH, cnt / 5) |
+		  FIELD_PREP(PPE_BM_TDM_CTRL_TDM_OFFSET, 0) |
+		  FIELD_PREP(PPE_BM_TDM_CTRL_TDM_EN, 1);
+	ret = ppe_write(ppe_dev, PPE_BM_TDM_CTRL, reg_val);
+	if (ret)
+		return ret;
+
+	ret = 0;
+	while ((cnt - ret) / 5) {
+		reg_val = FIELD_PREP(PPE_BM_TDM_CFG_TBL_VALID, cfg[ret]) |
+			  FIELD_PREP(PPE_BM_TDM_CFG_TBL_DIR, cfg[ret + 1]) |
+			  FIELD_PREP(PPE_BM_TDM_CFG_TBL_PORT_NUM, cfg[ret + 2]) |
+			  FIELD_PREP(PPE_BM_TDM_CFG_TBL_SECOND_PORT_VALID, cfg[ret + 3]) |
+			  FIELD_PREP(PPE_BM_TDM_CFG_TBL_SECOND_PORT, cfg[ret + 4]);
+
+		ppe_write(ppe_dev,
+			  PPE_BM_TDM_CFG_TBL + (ret / 5) * PPE_BM_TDM_CFG_TBL_INC,
+			  reg_val);
+		ret += 5;
+	}
+
+	cnt = of_property_count_u32_elems(tdm_node, "qcom,tdm-port-scheduler-config");
+	if (cnt < 0) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,tdm-port-scheduler-config\n");
+		goto parse_tdm_err;
+	}
+
+	cfg = krealloc_array(cfg, cnt, sizeof(*cfg), GFP_KERNEL | __GFP_ZERO);
+	if (!cfg) {
+		ret = -ENOMEM;
+		goto parse_tdm_err;
+	}
+
+	ret = of_property_read_u32_array(tdm_node, "qcom,tdm-port-scheduler-config",
+					 cfg, cnt);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Fail to get qcom,tdm-port-scheduler-config\n");
+		goto parse_tdm_err;
+	}
+
+	/* Parse TDM scheduler configuration,
+	 * the dts property:
+	 * qcom,tdm-port-scheduler-config = <ensch_bmp ensch_port desch_port
+	 * desch_second_valid desch_second_port>;
+	 *
+	 * This config decides the ticks number available for packet enqueue
+	 * and dequeue on the physical port.
+	 */
+	reg_val = FIELD_PREP(PPE_PSCH_TDM_DEPTH_CFG_TDM_DEPTH, cnt / 5);
+	ppe_write(ppe_dev, PPE_PSCH_TDM_DEPTH_CFG, reg_val);
+
+	ret = 0;
+	while ((cnt - ret) / 5) {
+		reg_val = FIELD_PREP(PPE_PSCH_TDM_CFG_TBL_ENS_PORT_BITMAP, cfg[ret]) |
+			  FIELD_PREP(PPE_PSCH_TDM_CFG_TBL_ENS_PORT, cfg[ret + 1]) |
+			  FIELD_PREP(PPE_PSCH_TDM_CFG_TBL_DES_PORT, cfg[ret + 2]) |
+			  FIELD_PREP(PPE_PSCH_TDM_CFG_TBL_DES_SECOND_PORT_EN, cfg[ret + 3]) |
+			  FIELD_PREP(PPE_PSCH_TDM_CFG_TBL_DES_SECOND_PORT, cfg[ret + 4]);
+
+		ppe_write(ppe_dev,
+			  PPE_PSCH_TDM_CFG_TBL + (ret / 5) * PPE_PSCH_TDM_CFG_TBL_INC,
+			  reg_val);
+		ret += 5;
+	}
+
+	ret = 0;
+parse_tdm_err:
+	kfree(cfg);
+	return ret;
+};
+
 static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 			       struct device_node *ppe_node)
 {
@@ -634,7 +739,11 @@ static int of_parse_ppe_config(struct ppe_device *ppe_dev,
 	if (ret)
 		return ret;
 
-	return of_parse_ppe_qm(ppe_dev, ppe_node);
+	ret = of_parse_ppe_qm(ppe_dev, ppe_node);
+	if (ret)
+		return ret;
+
+	return of_parse_ppe_tdm(ppe_dev, ppe_node);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
