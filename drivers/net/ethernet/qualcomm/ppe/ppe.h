@@ -140,4 +140,10 @@ struct ppe_data {
 };
 
 int ppe_type_get(struct ppe_device *ppe_dev);
+
+int ppe_write(struct ppe_device *ppe_dev, u32 reg, unsigned int val);
+int ppe_read(struct ppe_device *ppe_dev, u32 reg, unsigned int *val);
+int ppe_mask(struct ppe_device *ppe_dev, u32 reg, u32 mask, unsigned int set);
+int ppe_write_tbl(struct ppe_device *ppe_dev, u32 reg, const unsigned int *val, int cnt);
+int ppe_read_tbl(struct ppe_device *ppe_dev, u32 reg, unsigned int *val, int cnt);
 #endif
