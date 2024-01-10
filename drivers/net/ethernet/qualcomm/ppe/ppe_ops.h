@@ -183,4 +183,5 @@ const struct ppe_queue_ops *ppe_queue_config_ops_get(void);
 int ppe_servcode_config_set(struct ppe_device *ppe_dev,
 			    int servcode,
 			    struct ppe_servcode_cfg cfg);
+int ppe_counter_set(struct ppe_device *ppe_dev, int port, bool enable);
 #endif

@@ -311,6 +311,28 @@ int ppe_servcode_config_set(struct ppe_device *ppe_dev,
 	return ppe_write(ppe_dev, PPE_TL_SERVICE_TBL + PPE_TL_SERVICE_TBL_INC * servcode, val);
 }
 
+int ppe_counter_set(struct ppe_device *ppe_dev, int port, bool enable)
+{
+	union ppe_mru_mtu_ctrl_cfg_u mru_mtu_cfg;
+
+	memset(&mru_mtu_cfg, 0, sizeof(mru_mtu_cfg));
+
+	ppe_read_tbl(ppe_dev, PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * port,
+		     mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+	mru_mtu_cfg.bf.rx_cnt_en = enable;
+	mru_mtu_cfg.bf.tx_cnt_en = enable;
+	ppe_write_tbl(ppe_dev, PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * port,
+		      mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+
+	ppe_mask(ppe_dev, PPE_MC_MTU_CTRL_TBL + PPE_MC_MTU_CTRL_TBL_INC * port,
+		 PPE_MC_MTU_CTRL_TBL_TX_CNT_EN,
+		 FIELD_PREP(PPE_MC_MTU_CTRL_TBL_TX_CNT_EN, enable));
+
+	return ppe_mask(ppe_dev, PPE_PORT_EG_VLAN + PPE_PORT_EG_VLAN_INC * port,
+			PPE_PORT_EG_VLAN_TX_COUNTING_EN,
+			FIELD_PREP(PPE_PORT_EG_VLAN_TX_COUNTING_EN, enable));
+}
+
 static const struct ppe_queue_ops qcom_ppe_queue_config_ops = {
 	.queue_scheduler_set = ppe_queue_scheduler_set,
 	.queue_scheduler_get = ppe_queue_scheduler_get,

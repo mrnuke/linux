@@ -14,6 +14,11 @@
 #define PPE_BM_TDM_CTRL_TDM_OFFSET				GENMASK(14, 8)
 #define PPE_BM_TDM_CTRL_TDM_EN					BIT(31)
 
+#define PPE_RX_FIFO_CFG						0xb004
+#define PPE_RX_FIFO_CFG_NUM					8
+#define PPE_RX_FIFO_CFG_INC					4
+#define PPE_RX_FIFO_CFG_THRSH					GENMASK(2, 0)
+
 #define PPE_BM_TDM_CFG_TBL					0xc000
 #define PPE_BM_TDM_CFG_TBL_NUM					128
 #define PPE_BM_TDM_CFG_TBL_INC					0x10
@@ -43,6 +48,17 @@ union ppe_service_cfg_u {
 	struct ppe_service_cfg bf;
 };
 
+#define PPE_PORT_EG_VLAN					0x20020
+#define PPE_PORT_EG_VLAN_NUM					8
+#define PPE_PORT_EG_VLAN_INC					4
+#define PPE_PORT_EG_VLAN_PORT_VLAN_TYPE				BIT(0)
+#define PPE_PORT_EG_VLAN_PORT_EG_VLAN_CTAG_MODE			GENMASK(2, 1)
+#define PPE_PORT_EG_VLAN_PORT_EG_VLAN_STAG_MODE			GENMASK(4, 3)
+#define PPE_PORT_EG_VLAN_VSI_TAG_MODE_EN			BIT(5)
+#define PPE_PORT_EG_VLAN_PORT_EG_PCP_PROP_CMD			BIT(6)
+#define PPE_PORT_EG_VLAN_PORT_EG_DEI_PROP_CMD			BIT(7)
+#define PPE_PORT_EG_VLAN_TX_COUNTING_EN				BIT(8)
+
 #define PPE_EG_BRIDGE_CONFIG					0x20044
 #define PPE_EG_BRIDGE_CONFIG_QUEUE_CNT_EN			BIT(2)
 
@@ -71,6 +87,59 @@ struct ppe_eg_service_cfg {
 union ppe_eg_service_cfg_u {
 	u32 val[2];
 	struct ppe_eg_service_cfg bf;
+};
+
+#define PPE_TX_BUFF_THRSH					0x26100
+#define PPE_TX_BUFF_THRSH_NUM					8
+#define PPE_TX_BUFF_THRSH_INC					4
+#define PPE_TX_BUFF_THRSH_XOFF					GENMASK(7, 0)
+#define PPE_TX_BUFF_THRSH_XON					GENMASK(15, 8)
+
+#define PPE_MC_MTU_CTRL_TBL					0x60a00
+#define PPE_MC_MTU_CTRL_TBL_NUM					8
+#define PPE_MC_MTU_CTRL_TBL_INC					4
+#define PPE_MC_MTU_CTRL_TBL_MTU					GENMASK(13, 0)
+#define PPE_MC_MTU_CTRL_TBL_MTU_CMD				GENMASK(15, 14)
+#define PPE_MC_MTU_CTRL_TBL_TX_CNT_EN				BIT(16)
+
+#define PPE_MRU_MTU_CTRL_TBL					0x65000
+#define PPE_MRU_MTU_CTRL_TBL_NUM				256
+#define PPE_MRU_MTU_CTRL_TBL_INC				0x10
+
+/* PPE port control configuration, the MTU and QoS are configured by
+ * this table.
+ */
+struct ppe_mru_mtu_ctrl_cfg {
+	u32 mru:14,
+	    mru_cmd:2,
+	    mtu:14,
+	    mtu_cmd:2;
+
+	u32 rx_cnt_en:1,
+	    tx_cnt_en:1,
+	    src_profile:2,
+	    pcp_qos_group_id:1,
+	    dscp_qos_group_id:1,
+	    pcp_res_prec_force:1,
+	    dscp_res_prec_force:1,
+	    preheader_res_prec:3,
+	    pcp_res_prec:3,
+	    dscp_res_prec:3,
+	    flow_res_prec:3,
+	    pre_acl_res_prec:3,
+	    post_acl_res_prec:3,
+	    source_filtering_bypass:1,
+	    source_filtering_mode:1,
+	    pre_ipo_outer_res_prec:3,
+	    pre_ipo_inner_res_prec_0:1;
+
+	u32 pre_ipo_inner_res_prec_1:2,
+	    res0:30;
+};
+
+union ppe_mru_mtu_ctrl_cfg_u {
+	u32 val[3];
+	struct ppe_mru_mtu_ctrl_cfg bf;
 };
 
 #define PPE_IN_L2_SERVICE_TBL					0x66000
