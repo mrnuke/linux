@@ -16,8 +16,17 @@
 struct ppe_device {
 	struct device *dev;
 	struct regmap *regmap;
+	struct ppe_device_ops *ppe_ops;
 	bool is_ppe_probed;
 	void *ppe_priv;
+};
+
+/* PPE operations, which is used by the external driver like Ethernet
+ * DMA driver to configure PPE.
+ */
+struct ppe_device_ops {
+	int	(*set_maxframe)(struct ppe_device *ppe_dev, int port,
+				int maxframe_size);
 };
 
 /* Function used to check PPE platform dirver is registered correctly or not. */
@@ -25,4 +34,7 @@ bool ppe_is_probed(struct platform_device *pdev);
 
 /* Function used to get the PPE device */
 struct ppe_device *ppe_dev_get(struct platform_device *pdev);
+
+/* Function used to get the operations of PPE device */
+struct ppe_device_ops *ppe_ops_get(struct platform_device *pdev);
 #endif

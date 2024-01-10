@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
+#include <linux/if_ether.h>
 #include <linux/soc/qcom/ppe.h>
 #include "ppe.h"
 #include "ppe_regs.h"
@@ -292,6 +293,45 @@ struct ppe_device *ppe_dev_get(struct platform_device *pdev)
 	return platform_get_drvdata(pdev);
 }
 EXPORT_SYMBOL_GPL(ppe_dev_get);
+
+struct ppe_device_ops *ppe_ops_get(struct platform_device *pdev)
+{
+	struct ppe_device *ppe_dev = platform_get_drvdata(pdev);
+
+	if (!ppe_dev)
+		return NULL;
+
+	return ppe_dev->ppe_ops;
+}
+EXPORT_SYMBOL_GPL(ppe_ops_get);
+
+static int ppe_port_maxframe_set(struct ppe_device *ppe_dev,
+				 int port, int maxframe_size)
+{
+	union ppe_mru_mtu_ctrl_cfg_u mru_mtu_cfg;
+
+	/* The max frame size should be MTU added by ETH_HLEN in PPE */
+	maxframe_size += ETH_HLEN;
+
+	if (port < PPE_MC_MTU_CTRL_TBL_NUM)
+		ppe_mask(ppe_dev, PPE_MC_MTU_CTRL_TBL + PPE_MC_MTU_CTRL_TBL_INC * port,
+			 PPE_MC_MTU_CTRL_TBL_MTU,
+			 FIELD_PREP(PPE_MC_MTU_CTRL_TBL_MTU, maxframe_size));
+
+	memset(&mru_mtu_cfg, 0, sizeof(mru_mtu_cfg));
+	ppe_read_tbl(ppe_dev, PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * port,
+		     mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+
+	mru_mtu_cfg.bf.mru = maxframe_size;
+	mru_mtu_cfg.bf.mtu = maxframe_size;
+
+	return ppe_write_tbl(ppe_dev, PPE_MRU_MTU_CTRL_TBL + PPE_MRU_MTU_CTRL_TBL_INC * port,
+			     mru_mtu_cfg.val, sizeof(mru_mtu_cfg.val));
+}
+
+static struct ppe_device_ops qcom_ppe_ops = {
+	.set_maxframe = ppe_port_maxframe_set,
+};
 
 static const struct regmap_range ppe_readable_ranges[] = {
 	regmap_reg_range(0x0, 0x1FF), /* GLB */
@@ -1286,6 +1326,7 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 				     ret,
 				     "ppe device hw init failed\n");
 
+	ppe_dev->ppe_ops = &qcom_ppe_ops;
 	ppe_dev->is_ppe_probed = true;
 	return 0;
 }
