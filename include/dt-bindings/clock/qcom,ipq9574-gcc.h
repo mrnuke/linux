@@ -216,4 +216,5 @@
 #define GCC_CRYPTO_AHB_CLK				207
 #define GCC_USB0_PIPE_CLK				208
 #define GCC_USB0_SLEEP_CLK				209
+#define GPLL0_OUT_AUX					210
 #endif
