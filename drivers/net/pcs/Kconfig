@@ -44,4 +44,14 @@ config PCS_RZN1_MIIC
 	  on RZ/N1 SoCs. This PCS converts MII to RMII/RGMII or can be set in
 	  pass-through mode for MII.
 
+config PCS_QCOM_IPQ_UNIPHY
+	tristate "Qualcomm IPQ UNIPHY PCS driver"
+	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+	depends on HAS_IOMEM
+	help
+	  This module provides PCS driver for Qualcomm IPQ UNIPHY that is
+	  available on Qualcomm IPQ SoCs. The UNIPHY provides both PCS and XPCS
+	  functions to support different interface modes for MAC to PHY connections.
+	  These modes help to support various combination of ethernet switch/PHY on
+	  IPQ SoC based boards.
 endmenu
