@@ -98,6 +98,10 @@ properties:
       - const: sys
       - const: ahb
 
+  resets:
+    maxItems: 1
+    description: XPCS reset
+
   '#clock-cells':
     const: 1
     description: See include/dt-bindings/net/qcom,ipq9574-pcs.h for constants
@@ -137,6 +141,7 @@ required:
   - '#size-cells'
   - clocks
   - clock-names
+  - resets
   - '#clock-cells'
 
 additionalProperties: false
@@ -144,6 +149,7 @@ additionalProperties: false
 examples:
   - |
     #include <dt-bindings/clock/qcom,ipq9574-gcc.h>
+    #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
 
     ethernet-pcs@7a00000 {
         compatible = "qcom,ipq9574-pcs";
@@ -154,6 +160,7 @@ examples:
                  <&gcc GCC_UNIPHY0_AHB_CLK>;
         clock-names = "sys",
                       "ahb";
+        resets = <&gcc GCC_UNIPHY0_XPCS_RESET>;
         #clock-cells = <1>;
 
         pcs-mii@0 {
