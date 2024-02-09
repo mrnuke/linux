@@ -218,7 +218,7 @@ EXPORT_SYMBOL_NS_GPL(rtl83xx_probe, REALTEK_DSA);
  */
 int rtl83xx_register_switch(struct realtek_priv *priv)
 {
-	struct dsa_switch *ds;
+	struct dsa_switch *ds = &priv->ds;
 	int ret;
 
 	ret = priv->ops->detect(priv);
@@ -227,15 +227,10 @@ int rtl83xx_register_switch(struct realtek_priv *priv)
 		return ret;
 	}
 
-	ds = devm_kzalloc(priv->dev, sizeof(*ds), GFP_KERNEL);
-	if (!ds)
-		return -ENOMEM;
-
 	ds->priv = priv;
 	ds->dev = priv->dev;
 	ds->ops = priv->variant->ds_ops;
 	ds->num_ports = priv->num_ports;
-	priv->ds = ds;
 
 	ret = dsa_register_switch(ds);
 	if (ret) {
@@ -258,7 +253,9 @@ EXPORT_SYMBOL_NS_GPL(rtl83xx_register_switch, REALTEK_DSA);
  */
 void rtl83xx_unregister_switch(struct realtek_priv *priv)
 {
-	dsa_unregister_switch(priv->ds);
+	struct dsa_switch *ds = &priv->ds;
+
+	dsa_unregister_switch(ds);
 }
 EXPORT_SYMBOL_NS_GPL(rtl83xx_unregister_switch, REALTEK_DSA);
 
@@ -275,7 +272,9 @@ EXPORT_SYMBOL_NS_GPL(rtl83xx_unregister_switch, REALTEK_DSA);
  */
 void rtl83xx_shutdown(struct realtek_priv *priv)
 {
-	dsa_switch_shutdown(priv->ds);
+	struct dsa_switch *ds = &priv->ds;
+
+	dsa_switch_shutdown(ds);
 
 	dev_set_drvdata(priv->dev, NULL);
 }
