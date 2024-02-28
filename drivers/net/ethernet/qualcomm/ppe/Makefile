@@ -5,3 +5,6 @@
 
 obj-$(CONFIG_QCOM_PPE) += qcom-ppe.o
 qcom-ppe-objs := ppe.o ppe_config.o ppe_debugfs.o ppe_port.o
+
+#EDMA
+qcom-ppe-objs += edma.o
