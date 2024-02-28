@@ -788,4 +788,257 @@
 #define XGMAC_RXDISCARD_GB_ADDR			0x9AC
 #define XGMAC_RXDISCARDBYTE_GB_ADDR		0x9B4
 
+#define EDMA_BASE_OFFSET			0xb00000
+
+/* EDMA register offsets */
+#define EDMA_REG_MAS_CTRL_ADDR			0x0
+#define EDMA_REG_PORT_CTRL_ADDR			0x4
+#define EDMA_REG_VLAN_CTRL_ADDR			0x8
+#define EDMA_REG_RXDESC2FILL_MAP_0_ADDR		0x14
+#define EDMA_REG_RXDESC2FILL_MAP_1_ADDR		0x18
+#define EDMA_REG_RXDESC2FILL_MAP_2_ADDR		0x1c
+#define EDMA_REG_TXQ_CTRL_ADDR			0x20
+#define EDMA_REG_TXQ_CTRL_2_ADDR		0x24
+#define EDMA_REG_TXQ_FC_0_ADDR			0x28
+#define EDMA_REG_TXQ_FC_1_ADDR			0x30
+#define EDMA_REG_TXQ_FC_2_ADDR			0x34
+#define EDMA_REG_TXQ_FC_3_ADDR			0x38
+#define EDMA_REG_RXQ_CTRL_ADDR			0x3c
+#define EDMA_REG_MISC_ERR_QID_ADDR		0x40
+#define EDMA_REG_RXQ_FC_THRE_ADDR		0x44
+#define EDMA_REG_DMAR_CTRL_ADDR			0x48
+#define EDMA_REG_AXIR_CTRL_ADDR			0x4c
+#define EDMA_REG_AXIW_CTRL_ADDR			0x50
+#define EDMA_REG_MIN_MSS_ADDR			0x54
+#define EDMA_REG_LOOPBACK_CTRL_ADDR		0x58
+#define EDMA_REG_MISC_INT_STAT_ADDR		0x5c
+#define EDMA_REG_MISC_INT_MASK_ADDR		0x60
+#define EDMA_REG_DBG_CTRL_ADDR			0x64
+#define EDMA_REG_DBG_DATA_ADDR			0x68
+#define EDMA_REG_TX_TIMEOUT_THRESH_ADDR		0x6c
+#define EDMA_REG_REQ0_FIFO_THRESH_ADDR		0x80
+#define EDMA_REG_WB_OS_THRESH_ADDR		0x84
+#define EDMA_REG_MISC_ERR_QID_REG2_ADDR		0x88
+#define EDMA_REG_TXDESC2CMPL_MAP_0_ADDR		0x8c
+#define EDMA_REG_TXDESC2CMPL_MAP_1_ADDR		0x90
+#define EDMA_REG_TXDESC2CMPL_MAP_2_ADDR		0x94
+#define EDMA_REG_TXDESC2CMPL_MAP_3_ADDR		0x98
+#define EDMA_REG_TXDESC2CMPL_MAP_4_ADDR		0x9c
+#define EDMA_REG_TXDESC2CMPL_MAP_5_ADDR		0xa0
+
+/* Tx descriptor ring configuration register addresses */
+#define EDMA_REG_TXDESC_BA(n)		(0x1000 + (0x1000 * (n)))
+#define EDMA_REG_TXDESC_PROD_IDX(n)	(0x1004 + (0x1000 * (n)))
+#define EDMA_REG_TXDESC_CONS_IDX(n)	(0x1008 + (0x1000 * (n)))
+#define EDMA_REG_TXDESC_RING_SIZE(n)	(0x100c + (0x1000 * (n)))
+#define EDMA_REG_TXDESC_CTRL(n)		(0x1010 + (0x1000 * (n)))
+#define EDMA_REG_TXDESC_BA2(n)		(0x1014 + (0x1000 * (n)))
+
+/* RxFill ring configuration register addresses */
+#define EDMA_REG_RXFILL_BA(n)		(0x29000 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_PROD_IDX(n)	(0x29004 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_CONS_IDX(n)	(0x29008 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_RING_SIZE(n)	(0x2900c + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_BUFFER1_SIZE(n)	(0x29010 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_FC_THRE(n)	(0x29014 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_UGT_THRE(n)	(0x29018 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_RING_EN(n)	(0x2901c + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_DISABLE(n)	(0x29020 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_DISABLE_DONE(n)	(0x29024 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_INT_STAT(n)	(0x31000 + (0x1000 * (n)))
+#define EDMA_REG_RXFILL_INT_MASK(n)	(0x31004 + (0x1000 * (n)))
+
+/* Rx descriptor ring configuration register addresses */
+#define EDMA_REG_RXDESC_BA(n)		(0x39000 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_PROD_IDX(n)	(0x39004 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_CONS_IDX(n)	(0x39008 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_RING_SIZE(n)	(0x3900c + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_FC_THRE(n)	(0x39010 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_UGT_THRE(n)	(0x39014 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_CTRL(n)		(0x39018 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_BPC(n)		(0x3901c + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_DISABLE(n)	(0x39020 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_DISABLE_DONE(n)	(0x39024 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_PREHEADER_BA(n)	(0x39028 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_INT_STAT(n)	(0x59000 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_INT_MASK(n)	(0x59004 + (0x1000 * (n)))
+
+#define EDMA_REG_RX_MOD_TIMER(n)	(0x59008 + (0x1000 * (n)))
+#define EDMA_REG_RX_INT_CTRL(n)		(0x5900c + (0x1000 * (n)))
+
+/* Tx completion ring configuration register addresses */
+#define EDMA_REG_TXCMPL_BA(n)		(0x79000 + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_PROD_IDX(n)	(0x79004 + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_CONS_IDX(n)	(0x79008 + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_RING_SIZE(n)	(0x7900c + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_UGT_THRE(n)	(0x79010 + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_CTRL(n)		(0x79014 + (0x1000 * (n)))
+#define EDMA_REG_TXCMPL_BPC(n)		(0x79018 + (0x1000 * (n)))
+
+#define EDMA_REG_TX_INT_STAT(n)		(0x99000 + (0x1000 * (n)))
+#define EDMA_REG_TX_INT_MASK(n)		(0x99004 + (0x1000 * (n)))
+#define EDMA_REG_TX_MOD_TIMER(n)	(0x99008 + (0x1000 * (n)))
+#define EDMA_REG_TX_INT_CTRL(n)		(0x9900c + (0x1000 * (n)))
+
+/* EDMA_QID2RID_TABLE_MEM register field masks */
+#define EDMA_RX_RING_ID_QUEUE0_MASK	GENMASK(7, 0)
+#define EDMA_RX_RING_ID_QUEUE1_MASK	GENMASK(15, 8)
+#define EDMA_RX_RING_ID_QUEUE2_MASK	GENMASK(23, 16)
+#define EDMA_RX_RING_ID_QUEUE3_MASK	GENMASK(31, 24)
+
+/* EDMA_REG_PORT_CTRL register bit definitions */
+#define EDMA_PORT_PAD_EN			0x1
+#define EDMA_PORT_EDMA_EN			0x2
+
+/* EDMA_REG_DMAR_CTRL register field masks */
+#define EDMA_DMAR_REQ_PRI_MASK			GENMASK(2, 0)
+#define EDMA_DMAR_BURST_LEN_MASK		BIT(3)
+#define EDMA_DMAR_TXDATA_OUTSTANDING_NUM_MASK	GENMASK(8, 4)
+#define EDMA_DMAR_TXDESC_OUTSTANDING_NUM_MASK	GENMASK(11, 9)
+#define EDMA_DMAR_RXFILL_OUTSTANDING_NUM_MASK	GENMASK(14, 12)
+
+#define EDMA_BURST_LEN_ENABLE			0
+
+/* Tx timeout threshold */
+#define EDMA_TX_TIMEOUT_THRESH_VAL		0xFFFF
+
+/* Rx descriptor ring base address mask */
+#define EDMA_RXDESC_BA_MASK			0xffffffff
+
+/* Rx Descriptor ring pre-header base address mask */
+#define EDMA_RXDESC_PREHEADER_BA_MASK		0xffffffff
+
+/* Tx descriptor prod ring index mask */
+#define EDMA_TXDESC_PROD_IDX_MASK		0xffff
+
+/* Tx descriptor consumer ring index mask */
+#define EDMA_TXDESC_CONS_IDX_MASK		0xffff
+
+/* Tx descriptor ring size mask */
+#define EDMA_TXDESC_RING_SIZE_MASK		0xffff
+
+/* Tx descriptor ring enable */
+#define EDMA_TXDESC_TX_ENABLE			0x1
+
+#define EDMA_TXDESC_CTRL_TXEN_MASK		BIT(0)
+#define EDMA_TXDESC_CTRL_FC_GRP_ID_MASK		GENMASK(3, 1)
+
+/* Tx completion ring prod index mask */
+#define EDMA_TXCMPL_PROD_IDX_MASK		0xffff
+
+/* Tx completion ring urgent threshold mask */
+#define EDMA_TXCMPL_LOW_THRE_MASK		0xffff
+#define EDMA_TXCMPL_LOW_THRE_SHIFT		0
+
+/* EDMA_REG_TX_MOD_TIMER mask */
+#define EDMA_TX_MOD_TIMER_INIT_MASK		0xffff
+#define EDMA_TX_MOD_TIMER_INIT_SHIFT		0
+
+/* Rx fill ring prod index mask */
+#define EDMA_RXFILL_PROD_IDX_MASK		0xffff
+
+/* Rx fill ring consumer index mask */
+#define EDMA_RXFILL_CONS_IDX_MASK		0xffff
+
+/* Rx fill ring size mask */
+#define EDMA_RXFILL_RING_SIZE_MASK		0xffff
+
+/* Rx fill ring flow control threshold masks */
+#define EDMA_RXFILL_FC_XON_THRE_MASK		0x7ff
+#define EDMA_RXFILL_FC_XON_THRE_SHIFT		12
+#define EDMA_RXFILL_FC_XOFF_THRE_MASK		0x7ff
+#define EDMA_RXFILL_FC_XOFF_THRE_SHIFT		0
+
+/* Rx fill ring enable bit */
+#define EDMA_RXFILL_RING_EN			0x1
+
+/* Rx desc ring prod index mask */
+#define EDMA_RXDESC_PROD_IDX_MASK		0xffff
+
+/* Rx descriptor ring cons index mask */
+#define EDMA_RXDESC_CONS_IDX_MASK		0xffff
+
+/* Rx descriptor ring size masks */
+#define EDMA_RXDESC_RING_SIZE_MASK		0xffff
+#define EDMA_RXDESC_PL_OFFSET_MASK		0x1ff
+#define EDMA_RXDESC_PL_OFFSET_SHIFT		16
+#define EDMA_RXDESC_PL_DEFAULT_VALUE		0
+
+/* Rx descriptor ring flow control threshold masks */
+#define EDMA_RXDESC_FC_XON_THRE_MASK		0x7ff
+#define EDMA_RXDESC_FC_XON_THRE_SHIFT		12
+#define EDMA_RXDESC_FC_XOFF_THRE_MASK		0x7ff
+#define EDMA_RXDESC_FC_XOFF_THRE_SHIFT		0
+
+/* Rx descriptor ring urgent threshold mask */
+#define EDMA_RXDESC_LOW_THRE_MASK		0xffff
+#define EDMA_RXDESC_LOW_THRE_SHIFT		0
+
+/* Rx descriptor ring enable bit */
+#define EDMA_RXDESC_RX_EN			0x1
+
+/* Tx interrupt status bit */
+#define EDMA_TX_INT_MASK_PKT_INT		0x1
+
+/* Rx interrupt mask */
+#define EDMA_RXDESC_INT_MASK_PKT_INT		0x1
+
+#define EDMA_MASK_INT_DISABLE			0x0
+#define EDMA_MASK_INT_CLEAR			0x0
+
+/* EDMA_REG_RX_MOD_TIMER register field masks */
+#define EDMA_RX_MOD_TIMER_INIT_MASK		0xffff
+#define EDMA_RX_MOD_TIMER_INIT_SHIFT		0
+
+/* EDMA Ring mask */
+#define EDMA_RING_DMA_MASK			0xffffffff
+
+/* RXDESC threshold interrupt. */
+#define EDMA_RXDESC_UGT_INT_STAT		0x2
+
+/* RXDESC timer interrupt */
+#define EDMA_RXDESC_PKT_INT_STAT		0x1
+
+/* RXDESC Interrupt status mask */
+#define EDMA_RXDESC_RING_INT_STATUS_MASK \
+	(EDMA_RXDESC_UGT_INT_STAT | EDMA_RXDESC_PKT_INT_STAT)
+
+/* TXCMPL threshold interrupt. */
+#define EDMA_TXCMPL_UGT_INT_STAT		0x2
+
+/* TXCMPL timer interrupt */
+#define EDMA_TXCMPL_PKT_INT_STAT		0x1
+
+/* TXCMPL Interrupt status mask */
+#define EDMA_TXCMPL_RING_INT_STATUS_MASK \
+	(EDMA_TXCMPL_UGT_INT_STAT | EDMA_TXCMPL_PKT_INT_STAT)
+
+#define EDMA_TXCMPL_RETMODE_OPAQUE		0x0
+
+#define EDMA_RXDESC_LOW_THRE			0
+#define EDMA_RX_MOD_TIMER_INIT			1000
+#define EDMA_RX_NE_INT_EN			0x2
+
+#define EDMA_TX_MOD_TIMER			150
+
+#define EDMA_TX_INITIAL_PROD_IDX		0x0
+#define EDMA_TX_NE_INT_EN			0x2
+
+/* EDMA misc error mask */
+#define EDMA_MISC_AXI_RD_ERR_MASK		BIT(0)
+#define EDMA_MISC_AXI_WR_ERR_MASK		BIT(1)
+#define EDMA_MISC_RX_DESC_FIFO_FULL_MASK	BIT(2)
+#define EDMA_MISC_RX_ERR_BUF_SIZE_MASK		BIT(3)
+#define EDMA_MISC_TX_SRAM_FULL_MASK		BIT(4)
+#define EDMA_MISC_TX_CMPL_BUF_FULL_MASK		BIT(5)
+
+#define EDMA_MISC_DATA_LEN_ERR_MASK		BIT(6)
+#define EDMA_MISC_TX_TIMEOUT_MASK		BIT(7)
+
+/* EDMA txdesc2cmpl map */
+#define EDMA_TXDESC2CMPL_MAP_TXDESC_MASK		0x1F
+
+/* EDMA rxdesc2fill map */
+#define EDMA_RXDESC2FILL_MAP_RXDESC_MASK	0x7
+
 #endif

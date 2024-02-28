@@ -14,6 +14,7 @@
 #include <linux/regmap.h>
 #include <linux/reset.h>
 
+#include "edma.h"
 #include "ppe.h"
 #include "ppe_config.h"
 #include "ppe_debugfs.h"
@@ -208,10 +209,16 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "PPE HW config failed\n");
 
-	ret = ppe_port_mac_init(ppe_dev);
+	ret = edma_setup(ppe_dev);
 	if (ret)
+		return dev_err_probe(dev, ret, "EDMA setup failed\n");
+
+	ret = ppe_port_mac_init(ppe_dev);
+	if (ret) {
+		edma_destroy(ppe_dev);
 		return dev_err_probe(dev, ret,
 				     "PPE Port MAC initialization failed\n");
+	}
 
 	ppe_debugfs_setup(ppe_dev);
 	platform_set_drvdata(pdev, ppe_dev);
@@ -226,6 +233,7 @@ static void qcom_ppe_remove(struct platform_device *pdev)
 	ppe_dev = platform_get_drvdata(pdev);
 	ppe_debugfs_teardown(ppe_dev);
 	ppe_port_mac_deinit(ppe_dev);
+	edma_destroy(ppe_dev);
 
 	platform_set_drvdata(pdev, NULL);
 }
