@@ -20,6 +20,7 @@ struct dentry;
  * @clk_rate: PPE clock rate.
  * @num_ports: Number of PPE ports.
  * @debugfs_root: Debugfs root entry.
+ * @ports: PPE MAC ports.
  * @num_icc_paths: Number of interconnect paths.
  * @icc_paths: Interconnect path array.
  *
@@ -33,6 +34,7 @@ struct ppe_device {
 	unsigned long clk_rate;
 	unsigned int num_ports;
 	struct dentry *debugfs_root;
+	struct ppe_ports *ports;
 	unsigned int num_icc_paths;
 	struct icc_bulk_data icc_paths[] __counted_by(num_icc_paths);
 };
