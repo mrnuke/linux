@@ -17,6 +17,7 @@
 #include "ppe.h"
 #include "ppe_config.h"
 #include "ppe_debugfs.h"
+#include "ppe_port.h"
 
 #define PPE_PORT_MAX		8
 #define PPE_CLK_RATE		353000000
@@ -200,6 +201,11 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "PPE HW config failed\n");
 
+	ret = ppe_port_mac_init(ppe_dev);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "PPE Port MAC initialization failed\n");
+
 	ppe_debugfs_setup(ppe_dev);
 	platform_set_drvdata(pdev, ppe_dev);
 
@@ -212,6 +218,9 @@ static void qcom_ppe_remove(struct platform_device *pdev)
 
 	ppe_dev = platform_get_drvdata(pdev);
 	ppe_debugfs_teardown(ppe_dev);
+	ppe_port_mac_deinit(ppe_dev);
+
+	platform_set_drvdata(pdev, NULL);
 }
 
 static const struct of_device_id qcom_ppe_of_match[] = {

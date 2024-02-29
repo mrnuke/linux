@@ -9,6 +9,17 @@
 
 #include <linux/bitfield.h>
 
+/* PPE port mux select control register */
+#define PPE_PORT_MUX_CTRL_ADDR			0x10
+#define PPE_PORT6_SEL_XGMAC			BIT(13)
+#define PPE_PORT5_SEL_XGMAC			BIT(12)
+#define PPE_PORT4_SEL_XGMAC			BIT(11)
+#define PPE_PORT3_SEL_XGMAC			BIT(10)
+#define PPE_PORT2_SEL_XGMAC			BIT(9)
+#define PPE_PORT1_SEL_XGMAC			BIT(8)
+#define PPE_PORT5_SEL_PCS1			BIT(4)
+#define PPE_PORT_SEL_XGMAC(x)			(BIT(8) << ((x) - 1))
+
 /* PPE scheduler configurations for buffer manager block. */
 #define PPE_BM_SCH_CTRL_ADDR			0xb000
 #define PPE_BM_SCH_CTRL_INC			4
@@ -556,4 +567,117 @@
 #define PPE_ENQ_OPR_TBL_ENTRIES			300
 #define PPE_ENQ_OPR_TBL_INC			0x10
 #define PPE_ENQ_OPR_TBL_ENQ_DISABLE		BIT(0)
+
+/* PPE GMAC and XGMAC register base address */
+#define PPE_PORT_GMAC_ADDR(x)			(0x001000 + ((x) - 1) * 0x200)
+#define PPE_PORT_XGMAC_ADDR(x)			(0x500000 + ((x) - 1) * 0x4000)
+
+/* GMAC enable register */
+#define GMAC_ENABLE_ADDR			0x0
+#define GMAC_TXFCEN				BIT(6)
+#define GMAC_RXFCEN				BIT(5)
+#define GMAC_DUPLEX_FULL			BIT(4)
+#define GMAC_TXEN				BIT(1)
+#define GMAC_RXEN				BIT(0)
+
+#define GMAC_TRXEN				\
+	(GMAC_TXEN | GMAC_RXEN)
+#define GMAC_ENABLE_ALL				\
+	(GMAC_TXFCEN | GMAC_RXFCEN | GMAC_DUPLEX_FULL | GMAC_TXEN | GMAC_RXEN)
+
+/* GMAC speed register */
+#define GMAC_SPEED_ADDR				0x4
+#define GMAC_SPEED_M				GENMASK(1, 0)
+#define GMAC_SPEED_10				0
+#define GMAC_SPEED_100				1
+#define GMAC_SPEED_1000				2
+
+/* GMAC control register */
+#define GMAC_CTRL_ADDR				0x18
+#define GMAC_TX_THD_M				GENMASK(27, 24)
+#define GMAC_MAXFRAME_SIZE_M			GENMASK(21, 8)
+#define GMAC_CRS_SEL				BIT(6)
+
+#define GMAC_CTRL_MASK				\
+	(GMAC_TX_THD_M | GMAC_MAXFRAME_SIZE_M | GMAC_CRS_SEL)
+
+/* GMAC debug control register */
+#define GMAC_DBG_CTRL_ADDR			0x1c
+#define GMAC_HIGH_IPG_M				GENMASK(15, 8)
+
+/* GMAC jumbo size register */
+#define GMAC_JUMBO_SIZE_ADDR			0x30
+#define GMAC_JUMBO_SIZE_M			GENMASK(13, 0)
+
+/* GMAC MIB control register */
+#define GMAC_MIB_CTRL_ADDR			0x34
+#define GMAC_MIB_RD_CLR				BIT(2)
+#define GMAC_MIB_RST				BIT(1)
+#define GMAC_MIB_EN				BIT(0)
+
+#define GMAC_MIB_CTRL_MASK			\
+	(GMAC_MIB_RD_CLR | GMAC_MIB_RST | GMAC_MIB_EN)
+
+/* XGMAC TX configuration register */
+#define XGMAC_TX_CONFIG_ADDR			0x0
+#define XGMAC_SPEED_M				GENMASK(31, 29)
+#define XGMAC_SPEED_10000_USXGMII		FIELD_PREP(XGMAC_SPEED_M, 4)
+#define XGMAC_SPEED_10000			FIELD_PREP(XGMAC_SPEED_M, 0)
+#define XGMAC_SPEED_5000			FIELD_PREP(XGMAC_SPEED_M, 5)
+#define XGMAC_SPEED_2500_USXGMII		FIELD_PREP(XGMAC_SPEED_M, 6)
+#define XGMAC_SPEED_2500			FIELD_PREP(XGMAC_SPEED_M, 2)
+#define XGMAC_SPEED_1000			FIELD_PREP(XGMAC_SPEED_M, 3)
+#define XGMAC_SPEED_100				XGMAC_SPEED_1000
+#define XGMAC_SPEED_10				XGMAC_SPEED_1000
+#define XGMAC_JD				BIT(16)
+#define XGMAC_TXEN				BIT(0)
+
+/* XGMAC RX configuration register */
+#define XGMAC_RX_CONFIG_ADDR			0x4
+#define XGMAC_GPSL_M				GENMASK(29, 16)
+#define XGMAC_WD				BIT(7)
+#define XGMAC_GPSLEN				BIT(6)
+#define XGMAC_CST				BIT(2)
+#define XGMAC_ACS				BIT(1)
+#define XGMAC_RXEN				BIT(0)
+
+#define XGMAC_RX_CONFIG_MASK			\
+	(XGMAC_GPSL_M | XGMAC_WD | XGMAC_GPSLEN | XGMAC_CST | \
+	 XGMAC_ACS | XGMAC_RXEN)
+
+/* XGMAC packet filter register */
+#define XGMAC_PKT_FILTER_ADDR			0x8
+#define XGMAC_RA				BIT(31)
+#define XGMAC_PCF_M				GENMASK(7, 6)
+#define XGMAC_PR				BIT(0)
+
+#define XGMAC_PKT_FILTER_MASK			\
+	(XGMAC_RA | XGMAC_PCF_M | XGMAC_PR)
+#define XGMAC_PKT_FILTER_VAL			\
+	(XGMAC_RA | XGMAC_PR | FIELD_PREP(XGMAC_PCF_M, 0x2))
+
+/* XGMAC watchdog timeout register */
+#define XGMAC_WD_TIMEOUT_ADDR			0xc
+#define XGMAC_PWE				BIT(8)
+#define XGMAC_WTO_M				GENMASK(3, 0)
+
+#define XGMAC_WD_TIMEOUT_MASK			\
+	(XGMAC_PWE | XGMAC_WTO_M)
+#define XGMAC_WD_TIMEOUT_VAL			\
+	(XGMAC_PWE | FIELD_PREP(XGMAC_WTO_M, 0xb))
+
+/* XGMAC TX flow control register */
+#define XGMAC_TX_FLOW_CTRL_ADDR			0x70
+#define XGMAC_PAUSE_TIME_M			GENMASK(31, 16)
+#define XGMAC_TXFCEN				BIT(1)
+
+/* XGMAC RX flow control register */
+#define XGMAC_RX_FLOW_CTRL_ADDR			0x90
+#define XGMAC_RXFCEN				BIT(0)
+
+/* XGMAC management counters control register */
+#define XGMAC_MMC_CTRL_ADDR			0x800
+#define XGMAC_MCF				BIT(3)
+#define XGMAC_CNTRST				BIT(0)
+
 #endif
