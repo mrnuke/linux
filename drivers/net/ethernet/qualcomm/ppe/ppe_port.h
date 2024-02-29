@@ -8,6 +8,8 @@
 
 #include <linux/phylink.h>
 
+struct rtnl_link_stats64;
+
 /**
  * enum ppe_port_clk_rst_type - PPE port clock and reset ID type
  * @PPE_PORT_CLK_RST_MAC: The clock and reset ID for port MAC
@@ -44,6 +46,9 @@ enum ppe_mac_type {
  * @port_id: Port ID
  * @clks: Port clocks
  * @rstcs: Port resets
+ * @gmib_read: Delay work task for GMAC MIB statistics polling function
+ * @gmib_stats: GMAC MIB statistics array
+ * @gmib_stats_lock: Lock to protect GMAC MIB statistics
  */
 struct ppe_port {
 	struct phylink *phylink;
@@ -56,6 +61,9 @@ struct ppe_port {
 	int port_id;
 	struct clk *clks[PPE_PORT_CLK_RST_MAX];
 	struct reset_control *rstcs[PPE_PORT_CLK_RST_MAX];
+	struct delayed_work gmib_read;
+	u64 *gmib_stats;
+	spinlock_t gmib_stats_lock; /* Protects GMIB stats */
 };
 
 /**
@@ -73,4 +81,9 @@ void ppe_port_mac_deinit(struct ppe_device *ppe_dev);
 int ppe_port_phylink_setup(struct ppe_port *ppe_port,
 			   struct net_device *netdev);
 void ppe_port_phylink_destroy(struct ppe_port *ppe_port);
+int ppe_port_get_sset_count(struct ppe_port *ppe_port, int sset);
+void ppe_port_get_strings(struct ppe_port *ppe_port, u32 stringset, u8 *data);
+void ppe_port_get_ethtool_stats(struct ppe_port *ppe_port, u64 *data);
+void ppe_port_get_stats64(struct ppe_port *ppe_port,
+			  struct rtnl_link_stats64 *s);
 #endif
