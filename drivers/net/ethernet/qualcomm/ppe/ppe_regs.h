@@ -18,6 +18,16 @@
 #define PPE_PORT5_SEL_PCS1			BIT(4)
 #define PPE_PORT_SEL_XGMAC(x)			(BIT(8) << ((x) - 1))
 
+/* PPE port LPI enable register */
+#define PPE_LPI_EN_ADDR				0x400
+#define PPE_LPI_PORT1_EN			BIT(0)
+#define PPE_LPI_PORT2_EN			BIT(1)
+#define PPE_LPI_PORT3_EN			BIT(2)
+#define PPE_LPI_PORT4_EN			BIT(3)
+#define PPE_LPI_PORT5_EN			BIT(4)
+#define PPE_LPI_PORT6_EN			BIT(5)
+#define PPE_LPI_PORT_EN(x)			(BIT(0) << ((x) - 1))
+
 /* There are 15 BM ports and 4 BM groups supported by PPE,
  * BM port (0-7) is matched to EDMA port 0, BM port (8-13) is matched
  * to PPE physical port 1-6, BM port 14 is matched to EIP.
@@ -580,6 +590,17 @@
 #define GMAC_SPEED_100				1
 #define GMAC_SPEED_1000				2
 
+/* GMAC MAC address register */
+#define GMAC_GOL_ADDR0_ADDR			0x8
+#define GMAC_ADDR_BYTE5				GENMASK(15, 8)
+#define GMAC_ADDR_BYTE4				GENMASK(7, 0)
+
+#define GMAC_GOL_ADDR1_ADDR			0xC
+#define GMAC_ADDR_BYTE0				GENMASK(31, 24)
+#define GMAC_ADDR_BYTE1				GENMASK(23, 16)
+#define GMAC_ADDR_BYTE2				GENMASK(15, 8)
+#define GMAC_ADDR_BYTE3				GENMASK(7, 0)
+
 /* GMAC control register */
 #define GMAC_CTRL_ADDR				0x18
 #define GMAC_TX_THD_M				GENMASK(27, 24)
@@ -704,6 +725,14 @@
 /* XGMAC RX flow control register */
 #define XGMAC_RX_FLOW_CTRL_ADDR			0x90
 #define XGMAC_RXFCEN				BIT(0)
+
+/* XGMAC MAC address register */
+#define XGMAC_ADDR0_H_ADDR			0x300
+#define XGMAC_ADDR_EN				BIT(31)
+#define XGMAC_ADDRH				GENMASK(15, 0)
+
+#define XGMAC_ADDR0_L_ADDR			0x304
+#define XGMAC_ADDRL				GENMASK(31, 0)
 
 /* XGMAC management counters control register */
 #define XGMAC_MMC_CTRL_ADDR			0x800

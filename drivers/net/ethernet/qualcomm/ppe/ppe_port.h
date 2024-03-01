@@ -8,6 +8,7 @@
 
 #include <linux/phylink.h>
 
+struct ethtool_eee;
 struct rtnl_link_stats64;
 
 /**
@@ -86,4 +87,6 @@ void ppe_port_get_strings(struct ppe_port *ppe_port, u32 stringset, u8 *data);
 void ppe_port_get_ethtool_stats(struct ppe_port *ppe_port, u64 *data);
 void ppe_port_get_stats64(struct ppe_port *ppe_port,
 			  struct rtnl_link_stats64 *s);
+int ppe_port_set_mac_address(struct ppe_port *ppe_port, const u8 *addr);
+int ppe_port_set_mac_eee(struct ppe_port *ppe_port, struct ethtool_eee *eee);
 #endif
