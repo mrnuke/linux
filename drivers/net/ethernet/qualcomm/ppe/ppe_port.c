@@ -462,6 +462,81 @@ void ppe_port_get_stats64(struct ppe_port *ppe_port,
 	}
 }
 
+/**
+ * ppe_port_set_mac_address() - Set PPE port MAC address
+ * @ppe_port: PPE port
+ * @addr: MAC address
+ *
+ * Description: Set MAC address for the given PPE port.
+ *
+ * Return: 0 upon success or a negative error upon failure.
+ */
+int ppe_port_set_mac_address(struct ppe_port *ppe_port, const u8 *addr)
+{
+	struct ppe_device *ppe_dev = ppe_port->ppe_dev;
+	int port = ppe_port->port_id;
+	u32 reg, val;
+	int ret;
+
+	if (ppe_port->mac_type == PPE_MAC_TYPE_GMAC) {
+		reg = PPE_PORT_GMAC_ADDR(port);
+		val = (addr[5] << 8) | addr[4];
+		ret = regmap_write(ppe_dev->regmap, reg + GMAC_GOL_ADDR0_ADDR, val);
+		if (ret)
+			return ret;
+
+		val = (addr[0] << 24) | (addr[1] << 16) |
+		      (addr[2] << 8) | addr[3];
+		ret = regmap_write(ppe_dev->regmap, reg + GMAC_GOL_ADDR1_ADDR, val);
+		if (ret)
+			return ret;
+	} else {
+		reg = PPE_PORT_XGMAC_ADDR(port);
+		val = (addr[5] << 8) | addr[4] | XGMAC_ADDR_EN;
+		ret = regmap_write(ppe_dev->regmap, reg + XGMAC_ADDR0_H_ADDR, val);
+		if (ret)
+			return ret;
+
+		val = (addr[3] << 24) | (addr[2] << 16) |
+		      (addr[1] << 8) | addr[0];
+		ret = regmap_write(ppe_dev->regmap, reg + XGMAC_ADDR0_L_ADDR, val);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * ppe_port_set_mac_eee() - Set EEE configuration for PPE port MAC
+ * @ppe_port: PPE port
+ * @eee: EEE settings
+ *
+ * Description: Set port MAC EEE settings for the given PPE port.
+ *
+ * Return: 0 upon success or a negative error upon failure.
+ */
+int ppe_port_set_mac_eee(struct ppe_port *ppe_port, struct ethtool_keee *eee)
+{
+	struct ppe_device *ppe_dev = ppe_port->ppe_dev;
+	int port = ppe_port->port_id;
+	u32 val;
+	int ret;
+
+	ret = regmap_read(ppe_dev->regmap, PPE_LPI_EN_ADDR, &val);
+	if (ret)
+		return ret;
+
+	if (eee->tx_lpi_enabled)
+		val |= PPE_LPI_PORT_EN(port);
+	else
+		val &= ~PPE_LPI_PORT_EN(port);
+
+	ret = regmap_write(ppe_dev->regmap, PPE_LPI_EN_ADDR, val);
+
+	return ret;
+}
+
 /* PPE port and MAC reset */
 static int ppe_port_mac_reset(struct ppe_port *ppe_port)
 {
