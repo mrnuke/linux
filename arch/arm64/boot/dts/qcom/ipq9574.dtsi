@@ -13,6 +13,7 @@
 #include <dt-bindings/interconnect/qcom,ipq9574.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
+#include <dt-bindings/reset/qcom,ipq9574-nsscc.h>
 #include <dt-bindings/thermal/thermal.h>
 
 / {
@@ -1267,6 +1268,44 @@
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#interconnect-cells = <1>;
+		};
+
+		qcom_ppe: ethernet@3a000000 {
+			compatible = "qcom,ipq9574-ppe";
+			reg = <0x3a000000 0xbef800>;
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			clocks = <&nsscc NSS_CC_PPE_SWITCH_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_CFG_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_IPE_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_BTQ_CLK>;
+			clock-names = "ppe",
+				      "ppe_cfg",
+				      "ppe_ipe",
+				      "ppe_btq";
+			resets = <&nsscc PPE_FULL_RESET>;
+			interconnects = <&nsscc MASTER_NSSNOC_PPE
+					 &nsscc SLAVE_NSSNOC_PPE>,
+					<&nsscc MASTER_NSSNOC_PPE_CFG
+					 &nsscc SLAVE_NSSNOC_PPE_CFG>,
+					<&gcc MASTER_NSSNOC_QOSGEN_REF
+					 &gcc SLAVE_NSSNOC_QOSGEN_REF>,
+					<&gcc MASTER_NSSNOC_TIMEOUT_REF
+					 &gcc SLAVE_NSSNOC_TIMEOUT_REF>,
+					<&gcc MASTER_MEM_NOC_NSSNOC
+					 &gcc SLAVE_MEM_NOC_NSSNOC>,
+					<&gcc MASTER_NSSNOC_MEMNOC
+					 &gcc SLAVE_NSSNOC_MEMNOC>,
+					<&gcc MASTER_NSSNOC_MEM_NOC_1
+					 &gcc SLAVE_NSSNOC_MEM_NOC_1>;
+			interconnect-names = "ppe",
+					     "ppe_cfg",
+					     "qos_gen",
+					     "timeout_ref",
+					     "nssnoc_memnoc",
+					     "memnoc_nssnoc",
+					     "memnoc_nssnoc_1";
 		};
 
 		pcs_uniphy0: ethernet-pcs@7a00000 {
