@@ -537,6 +537,50 @@ int ppe_port_set_mac_eee(struct ppe_port *ppe_port, struct ethtool_eee *eee)
 	return ret;
 }
 
+/**
+ * ppe_port_set_maxframe() - Set port maximum frame size
+ * @ppe_port: PPE port structure
+ * @maxframe_size: Maximum frame size supported by PPE port
+ *
+ * Description: Set MTU of network interface specified by @ppe_port.
+ *
+ * Return: 0 upon success or a negative error upon failure.
+ */
+int ppe_port_set_maxframe(struct ppe_port *ppe_port, int maxframe_size)
+{
+	struct ppe_device *ppe_dev = ppe_port->ppe_dev;
+	u32 reg, val, mru_mtu_val[3];
+	int port = ppe_port->port_id;
+	int ret;
+
+	/* The max frame size should be MTU added by ETH_HLEN in PPE. */
+	maxframe_size += ETH_HLEN;
+
+	/* MAC takes cover the FCS for the calculation of frame size. */
+	if (maxframe_size > PPE_PORT_MAC_MAX_FRAME_SIZE - ETH_FCS_LEN)
+		return -EINVAL;
+
+	reg = PPE_MC_MTU_CTRL_TBL_ADDR + PPE_MC_MTU_CTRL_TBL_INC * port;
+	val = FIELD_PREP(PPE_MC_MTU_CTRL_TBL_MTU, maxframe_size);
+	ret = regmap_update_bits(ppe_dev->regmap, reg,
+				 PPE_MC_MTU_CTRL_TBL_MTU,
+				 val);
+	if (ret)
+		return ret;
+
+	reg = PPE_MRU_MTU_CTRL_TBL_ADDR + PPE_MRU_MTU_CTRL_TBL_INC * port;
+	ret = regmap_bulk_read(ppe_dev->regmap, reg,
+			       mru_mtu_val, ARRAY_SIZE(mru_mtu_val));
+	if (ret)
+		return ret;
+
+	PPE_MRU_MTU_CTRL_SET_MRU(mru_mtu_val, maxframe_size);
+	PPE_MRU_MTU_CTRL_SET_MTU(mru_mtu_val, maxframe_size);
+
+	return regmap_bulk_write(ppe_dev->regmap, reg,
+				 mru_mtu_val, ARRAY_SIZE(mru_mtu_val));
+}
+
 /* PPE port and MAC reset */
 static int ppe_port_mac_reset(struct ppe_port *ppe_port)
 {
