@@ -1314,6 +1314,73 @@
 					     "nssnoc_memnoc",
 					     "memnoc_nssnoc",
 					     "memnoc_nssnoc_1";
+
+			ethernet-dma {
+				clocks = <&nsscc NSS_CC_PPE_EDMA_CLK>,
+					 <&nsscc NSS_CC_PPE_EDMA_CFG_CLK>;
+				clock-names = "sys",
+					      "apb";
+				resets = <&nsscc EDMA_HW_RESET>;
+				reset-names = "edma";
+				interrupts = <GIC_SPI 371 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 372 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 373 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 374 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 375 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 376 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 377 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 378 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 379 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 380 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 381 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 382 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 383 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 384 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 509 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 508 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 507 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 506 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 505 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 504 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 503 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 502 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 501 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 500 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 351 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 352 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 353 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 354 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 499 IRQ_TYPE_LEVEL_HIGH>;
+				interrupt-names = "txcmpl_8",
+						  "txcmpl_9",
+						  "txcmpl_10",
+						  "txcmpl_11",
+						  "txcmpl_12",
+						  "txcmpl_13",
+						  "txcmpl_14",
+						  "txcmpl_15",
+						  "txcmpl_16",
+						  "txcmpl_17",
+						  "txcmpl_18",
+						  "txcmpl_19",
+						  "txcmpl_20",
+						  "txcmpl_21",
+						  "txcmpl_22",
+						  "txcmpl_23",
+						  "txcmpl_24",
+						  "txcmpl_25",
+						  "txcmpl_26",
+						  "txcmpl_27",
+						  "txcmpl_28",
+						  "txcmpl_29",
+						  "txcmpl_30",
+						  "txcmpl_31",
+						  "rxdesc_20",
+						  "rxdesc_21",
+						  "rxdesc_22",
+						  "rxdesc_23",
+						  "misc";
+			};
 		};
 
 		pcs_uniphy0: ethernet-pcs@7a00000 {
