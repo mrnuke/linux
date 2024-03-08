@@ -20,9 +20,21 @@
 #include <linux/gpio/consumer.h>
 #include <linux/etherdevice.h>
 #include <linux/dsa/tag_qca.h>
+#include <linux/clk.h>
+#include <linux/reset.h>
 
 #include "qca8k.h"
 #include "qca8k_leds.h"
+
+static const char *const qca8386_port_clock_name[PORT_CLK_CNT] = {
+	"port_rx_clk", "port_tx_clk",
+	"port_rx_src_clk", "port_tx_src_clk",
+	"ephy_rx_clk", "ephy_tx_clk",
+};
+
+static const char *const qca8386_port_reset_name[PORT_RESET_CNT] = {
+	"ephy_rx_reset", "ephy_tx_reset",
+};
 
 static void
 qca8k_split_addr(u32 regaddr, u16 *r1, u16 *r2, u16 *page)
@@ -1198,6 +1210,37 @@ qca8k_setup_of_pws_reg(struct qca8k_priv *priv)
 			val);
 }
 
+static void qca8386_port_reset_release(struct qca8k_priv *priv)
+{
+	struct dsa_port *dp;
+	int ret;
+
+	dsa_switch_for_each_available_port(dp, priv->ds)
+		for (ret = 0; ret < PORT_RESET_CNT; ret++)
+			reset_control_put(priv->port[dp->index].reset[ret]);
+}
+
+static int qca8386_parse_port_config(struct qca8k_priv *priv)
+{
+	struct dsa_port *dp;
+	int ret;
+
+	dsa_switch_for_each_available_port(dp, priv->ds) {
+		for (ret = 0; ret < PORT_CLK_CNT; ret++)
+			priv->port[dp->index].clk[ret] = of_clk_get_by_name(dp->dn,
+					qca8386_port_clock_name[ret]);
+
+
+		for (ret = 0; ret < PORT_RESET_CNT; ret++)
+			priv->port[dp->index].reset[ret] =
+				of_reset_control_get_optional_exclusive(dp->dn,
+						qca8386_port_reset_name[ret]);
+	}
+
+	return 0;
+}
+
+
 static int
 qca8k_parse_port_config(struct qca8k_priv *priv)
 {
@@ -1206,6 +1249,17 @@ qca8k_parse_port_config(struct qca8k_priv *priv)
 	phy_interface_t mode;
 	struct dsa_port *dp;
 	u32 delay;
+
+	/* QCA8386 does not support RGMII and the SGMII PLL configs are
+	 * not needed, however, there is a clock controller integrated
+	 * in the QCA8386, this inner clock controller is driven by the
+	 * clock provider, the clocks and resets from this inner clock
+	 * provider need to be configured as the correct value for the
+	 * current port link speed, these clocks and resets are defined
+	 * the port device tree node.
+	 */
+	if (priv->switch_id == QCA8K_ID_QCA8386)
+		return qca8386_parse_port_config(priv);
 
 	/* We have 2 CPU port. Check them */
 	for (port = 0; port < QCA8K_NUM_PORTS; port++) {
@@ -2240,9 +2294,16 @@ qca8k_setup(struct dsa_switch *ds)
 	return 0;
 }
 
+static void qca8k_teardown(struct dsa_switch *ds)
+{
+	struct qca8k_priv *priv = ds->priv;
+	qca8386_port_reset_release(priv);
+}
+
 static const struct dsa_switch_ops qca8k_switch_ops = {
 	.get_tag_protocol	= qca8k_get_tag_protocol,
 	.setup			= qca8k_setup,
+	.teardown		= qca8k_teardown,
 	.get_strings		= qca8k_get_strings,
 	.get_ethtool_stats	= qca8k_get_ethtool_stats,
 	.get_sset_count		= qca8k_get_sset_count,
@@ -2301,6 +2362,10 @@ qca8k_sw_probe(struct mdio_device *mdiodev)
 	priv->bus = mdiodev->bus;
 	priv->dev = &mdiodev->dev;
 	priv->info = of_device_get_match_data(priv->dev);
+
+	priv->root_clk = devm_clk_get_optional(priv->dev, "uniphy1_tx_312p5m_clk");
+	if (IS_ERR(priv->root_clk))
+		return PTR_ERR(priv->root_clk);
 
 	priv->reset_gpio = devm_gpiod_get_optional(priv->dev, "reset",
 						   GPIOD_OUT_HIGH);

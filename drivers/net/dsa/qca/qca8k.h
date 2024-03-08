@@ -18,6 +18,8 @@
 #define QCA8K_ETHERNET_PHY_PRIORITY			6
 #define QCA8K_ETHERNET_TIMEOUT				5
 
+/* Ther are 4 front panel ports and two CPU ports on QCA8386. */
+#define QCA8386_NUM_PORTS				6
 #define QCA8K_NUM_PORTS					7
 #define QCA8K_NUM_CPU_PORTS				2
 #define QCA8K_MAX_MTU					9000
@@ -495,6 +497,27 @@ struct qca8k_led {
 	struct led_classdev cdev;
 };
 
+enum {
+	PORT_RX_CLK,
+	PORT_TX_CLK,
+	PORT_RX_SRC_CLK,
+	PORT_TX_SRC_CLK,
+	EPHY_RX_CLK,
+	EPHY_TX_CLK,
+	PORT_CLK_CNT,
+};
+
+enum {
+	EPHY_RX_RESET,
+	EPHY_TX_RESET,
+	PORT_RESET_CNT,
+};
+
+struct qca8386_port {
+	struct clk *clk[PORT_CLK_CNT];
+	struct reset_control *reset[PORT_RESET_CNT];
+};
+
 struct qca8k_priv {
 	u8 switch_id;
 	u8 switch_revision;
@@ -521,6 +544,8 @@ struct qca8k_priv {
 	struct qca8k_pcs pcs_port_6;
 	const struct qca8k_match_data *info;
 	struct qca8k_led ports_led[QCA8K_LED_COUNT];
+	struct qca8386_port port[QCA8386_NUM_PORTS];
+	struct clk *root_clk;   /* The root clock of qca8386 port */
 };
 
 struct qca8k_mib_desc {
