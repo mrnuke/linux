@@ -142,6 +142,11 @@
 #define   QCA8K_PORT_STATUS_SPEED_10			0
 #define   QCA8K_PORT_STATUS_SPEED_100			0x1
 #define   QCA8K_PORT_STATUS_SPEED_1000			0x2
+/* The hardware register value of speed 2500 is same as the speed 1000, but
+ * the clock rate is different, speed 2500 uses the clock rate 312.5M, and
+ * speed 1000 uses the clock rate 125M.
+ */
+#define   QCA8386_PORT_STATUS_SPEED_2500		0x2
 #define   QCA8K_PORT_STATUS_TXMAC			BIT(2)
 #define   QCA8K_PORT_STATUS_RXMAC			BIT(3)
 #define   QCA8K_PORT_STATUS_TXFLOW			BIT(4)
@@ -545,6 +550,7 @@ struct qca8k_priv {
 	const struct qca8k_match_data *info;
 	struct qca8k_led ports_led[QCA8K_LED_COUNT];
 	struct qca8386_port port[QCA8386_NUM_PORTS];
+	struct phylink_pcs *pcs[QCA8K_NUM_CPU_PORTS]; /* CPU port0 and port5 */
 	struct clk *root_clk;   /* The root clock of qca8386 port */
 };
 

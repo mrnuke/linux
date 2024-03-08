@@ -12,6 +12,7 @@ config NET_DSA_QCA8K
 	tristate "Qualcomm Atheros QCA8K Ethernet switch family support"
 	select NET_DSA_TAG_QCA
 	select REGMAP
+	select PCS_QCA8K
 	help
 	  This enables support for the Qualcomm Atheros QCA8K Ethernet
 	  switch chips.

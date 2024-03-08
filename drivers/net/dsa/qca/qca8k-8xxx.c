@@ -22,6 +22,7 @@
 #include <linux/dsa/tag_qca.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
+#include <linux/pcs/pcs-qca8k.h>
 
 #include "qca8k.h"
 #include "qca8k_leds.h"
@@ -1215,9 +1216,17 @@ static void qca8386_port_reset_release(struct qca8k_priv *priv)
 	struct dsa_port *dp;
 	int ret;
 
-	dsa_switch_for_each_available_port(dp, priv->ds)
+	dsa_switch_for_each_available_port(dp, priv->ds) {
+		if (dsa_port_is_user(dp)) {
+			clk_set_rate(priv->port[dp->index].clk[EPHY_RX_CLK],
+				     P_XO_CLOCK_RATE);
+			clk_set_rate(priv->port[dp->index].clk[EPHY_TX_CLK],
+				     P_XO_CLOCK_RATE);
+		}
+
 		for (ret = 0; ret < PORT_RESET_CNT; ret++)
 			reset_control_put(priv->port[dp->index].reset[ret]);
+	}
 }
 
 static int qca8386_parse_port_config(struct qca8k_priv *priv)
@@ -1392,11 +1401,42 @@ qca8k_mac_config_setup_internal_delay(struct qca8k_priv *priv, int cpu_port_inde
 }
 
 static struct phylink_pcs *
+qca8386_phylink_mac_select_pcs(struct qca8k_priv *priv, int port,
+			       phy_interface_t interface)
+{
+	struct phylink_pcs *pcs = NULL;
+
+	switch (interface) {
+	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+	case PHY_INTERFACE_MODE_2500BASEX:
+		switch (port) {
+		case 0:
+			pcs = priv->pcs[0];
+			break;
+
+		case 5:
+			pcs = priv->pcs[1];
+			break;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	return pcs;
+}
+
+static struct phylink_pcs *
 qca8k_phylink_mac_select_pcs(struct dsa_switch *ds, int port,
 			     phy_interface_t interface)
 {
 	struct qca8k_priv *priv = ds->priv;
 	struct phylink_pcs *pcs = NULL;
+
+	if (priv->switch_id == QCA8K_ID_QCA8386)
+		return qca8386_phylink_mac_select_pcs(priv, port, interface);
 
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
@@ -1426,6 +1466,9 @@ qca8k_phylink_mac_config(struct dsa_switch *ds, int port, unsigned int mode,
 	struct qca8k_priv *priv = ds->priv;
 	int cpu_port_index;
 	u32 reg;
+
+	if (priv->switch_id == QCA8K_ID_QCA8386)
+		return;
 
 	switch (port) {
 	case 0: /* 1st CPU port */
@@ -1499,9 +1542,49 @@ qca8k_phylink_mac_config(struct dsa_switch *ds, int port, unsigned int mode,
 	}
 }
 
+static void qca8386_phylink_get_caps(struct dsa_switch *ds, int port,
+				     struct phylink_config *config)
+{
+	switch (port) {
+	case 0: /* 1st CPU port */
+	case 5: /* 2nd CPU port */
+		__set_bit(PHY_INTERFACE_MODE_SGMII,
+			  config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+			  config->supported_interfaces);
+		break;
+
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+		/* Internal PHY */
+		__set_bit(PHY_INTERFACE_MODE_GMII,
+			  config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
+			  config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_SGMII,
+			  config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+			  config->supported_interfaces);
+		break;
+
+	}
+
+	config->mac_capabilities = MAC_ASYM_PAUSE | MAC_SYM_PAUSE |
+				   MAC_10 | MAC_100 | MAC_1000FD | MAC_2500FD;
+}
+
 static void qca8k_phylink_get_caps(struct dsa_switch *ds, int port,
 				   struct phylink_config *config)
 {
+	struct qca8k_priv *priv = ds->priv;
+
+	if (priv->switch_id == QCA8K_ID_QCA8386) {
+		qca8386_phylink_get_caps(ds, port, config);
+		return;
+	}
+
 	switch (port) {
 	case 0: /* 1st CPU port */
 		phy_interface_set_rgmii(config->supported_interfaces);
@@ -1538,9 +1621,18 @@ static void
 qca8k_phylink_mac_link_down(struct dsa_switch *ds, int port, unsigned int mode,
 			    phy_interface_t interface)
 {
+	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct qca8k_priv *priv = ds->priv;
 
 	qca8k_port_set_status(priv, port, 0);
+
+	if (priv->switch_id == QCA8K_ID_QCA8386 && dsa_port_is_user(dp)) {
+		clk_disable_unprepare(priv->port[dp->index].clk[EPHY_RX_CLK]);
+		clk_disable_unprepare(priv->port[dp->index].clk[EPHY_TX_CLK]);
+
+		reset_control_reset(priv->port[dp->index].reset[EPHY_RX_RESET]);
+		reset_control_reset(priv->port[dp->index].reset[EPHY_TX_RESET]);
+	}
 }
 
 static void
@@ -1548,7 +1640,9 @@ qca8k_phylink_mac_link_up(struct dsa_switch *ds, int port, unsigned int mode,
 			  phy_interface_t interface, struct phy_device *phydev,
 			  int speed, int duplex, bool tx_pause, bool rx_pause)
 {
+	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct qca8k_priv *priv = ds->priv;
+	unsigned long rate;
 	u32 reg;
 
 	if (phylink_autoneg_inband(mode)) {
@@ -1557,12 +1651,19 @@ qca8k_phylink_mac_link_up(struct dsa_switch *ds, int port, unsigned int mode,
 		switch (speed) {
 		case SPEED_10:
 			reg = QCA8K_PORT_STATUS_SPEED_10;
+			rate = 2500000;
 			break;
 		case SPEED_100:
 			reg = QCA8K_PORT_STATUS_SPEED_100;
+			rate = 25000000;
 			break;
 		case SPEED_1000:
 			reg = QCA8K_PORT_STATUS_SPEED_1000;
+			rate = 125000000;
+			break;
+		case SPEED_2500:
+			reg = QCA8386_PORT_STATUS_SPEED_2500;
+			rate = 312500000;
 			break;
 		default:
 			reg = QCA8K_PORT_STATUS_LINK_AUTO;
@@ -1582,6 +1683,38 @@ qca8k_phylink_mac_link_up(struct dsa_switch *ds, int port, unsigned int mode,
 	reg |= QCA8K_PORT_STATUS_TXMAC | QCA8K_PORT_STATUS_RXMAC;
 
 	qca8k_write(priv, QCA8K_REG_PORT_STATUS(port), reg);
+
+	if (priv->switch_id == QCA8K_ID_QCA8386 && dsa_port_is_user(dp)) {
+		/* The EPHY of port4 can be connected with MAC(switch mode) or
+		 * PCS(PHY mode), the clock parent is different for these two
+		 * work mode, for the switch mode(DSA) here, the parent clock of
+		 * port4 needs to be manually configured to the root clock
+		 * UNIPHY1_TX_312P5M_CLK.
+		 */
+		int ret;
+		ret = clk_set_parent(priv->port[port].clk[PORT_RX_SRC_CLK],
+				     priv->root_clk);
+		if (ret) {
+			dev_err(priv->dev, "set parent clock of port4 rx failed\n");
+			return;
+		}
+
+		ret = clk_set_parent(priv->port[port].clk[PORT_TX_SRC_CLK],
+				     priv->root_clk);
+		if (ret) {
+			dev_err(priv->dev, "set parent clock of port4 tx failed\n");
+			return;
+		}
+
+		clk_set_rate(priv->port[port].clk[EPHY_RX_CLK], rate);
+		clk_set_rate(priv->port[port].clk[EPHY_TX_CLK], rate);
+
+		clk_prepare_enable(priv->port[port].clk[EPHY_RX_CLK]);
+		clk_prepare_enable(priv->port[port].clk[EPHY_TX_CLK]);
+
+		reset_control_reset(priv->port[port].reset[EPHY_RX_RESET]);
+		reset_control_reset(priv->port[port].reset[EPHY_TX_RESET]);
+	}
 }
 
 static struct qca8k_pcs *pcs_to_qca8k_pcs(struct phylink_pcs *pcs)
@@ -2081,6 +2214,53 @@ static void qca8386_setup_hol_fixup(struct qca8k_priv *priv, int port)
 			   mask);
 }
 
+static struct phylink_pcs *qca8386_pcs_create(struct device_node *dp_node)
+{
+	struct device_node *node;
+
+	node = of_parse_phandle(dp_node, "pcsphy-handle", 0);
+	if (!node)
+		return ERR_PTR(-ENODEV);
+
+	return qca8k_pcs_create_fwnode(of_fwnode_handle(node));
+}
+
+static int qca8386_setup_pcs_and_clock(struct dsa_switch *ds)
+{
+	struct qca8k_priv *priv = ds->priv;
+	struct dsa_port *dp = NULL;
+	int ret = 0;
+
+	if (dsa_is_cpu_port(ds, 0)) {
+		dp = dsa_to_port(priv->ds, 0);
+		priv->pcs[0] = qca8386_pcs_create(dp->dn);
+	} else {
+		return -EINVAL;
+	}
+
+	/* CPU port 5 is optional to to used. */
+	if (dsa_is_cpu_port(ds, 5)) {
+		dp = dsa_to_port(priv->ds, 5);
+		priv->pcs[1] = qca8386_pcs_create(dp->dn);
+	}
+
+	dsa_switch_for_each_available_port(dp, ds) {
+		ret = clk_prepare_enable(priv->port[dp->index].clk[PORT_RX_CLK]);
+		if (ret) {
+			dev_err(priv->dev, "fail to enable rx clock of port %d\n", dp->index);
+			return ret;
+		}
+
+		ret = clk_prepare_enable(priv->port[dp->index].clk[PORT_TX_CLK]);
+		if (ret) {
+			dev_err(priv->dev, "fail to enable tx clock of port %d\n", dp->index);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int
 qca8k_setup(struct dsa_switch *ds)
 {
@@ -2116,8 +2296,14 @@ qca8k_setup(struct dsa_switch *ds)
 	if (ret)
 		return ret;
 
-	qca8k_setup_pcs(priv, &priv->pcs_port_0, 0);
-	qca8k_setup_pcs(priv, &priv->pcs_port_6, 6);
+	if (priv->switch_id == QCA8K_ID_QCA8386) {
+		ret = qca8386_setup_pcs_and_clock(ds);
+		if (ret)
+			return ret;
+	} else {
+		qca8k_setup_pcs(priv, &priv->pcs_port_0, 0);
+		qca8k_setup_pcs(priv, &priv->pcs_port_6, 6);
+	}
 
 	/* Make sure MAC06 is disabled */
 	ret = regmap_clear_bits(priv->regmap, QCA8K_REG_PORT0_PAD_CTRL,
@@ -2294,10 +2480,21 @@ qca8k_setup(struct dsa_switch *ds)
 	return 0;
 }
 
+static void qca8386_pcs_destory(struct phylink_pcs *pcs)
+{
+	if (IS_ERR_OR_NULL(pcs))
+		return;
+
+	qca8k_pcs_destroy(pcs);
+}
+
 static void qca8k_teardown(struct dsa_switch *ds)
 {
 	struct qca8k_priv *priv = ds->priv;
 	qca8386_port_reset_release(priv);
+
+	qca8386_pcs_destory(priv->pcs[0]);
+	qca8386_pcs_destory(priv->pcs[1]);
 }
 
 static const struct dsa_switch_ops qca8k_switch_ops = {
