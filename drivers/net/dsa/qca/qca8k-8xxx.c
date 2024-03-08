@@ -1985,6 +1985,48 @@ static void qca8k_setup_hol_fixup(struct qca8k_priv *priv, int port)
 			   mask);
 }
 
+static void qca8386_setup_hol_fixup(struct qca8k_priv *priv, int port)
+{
+	u32 mask, hol1_mask = 0;
+
+	switch (port) {
+	/* The CPU port 0, 5 require some different priority than
+	 * any other ports.
+	 */
+	case 0:
+	case 5:
+		mask = QCA8386_PORT_HOL_CTRL0_EG_PRI0(0x3) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI1(0x4) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI2(0x4) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI3(0x4) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PORT(0x4b);
+		hol1_mask = QCA8386_PORT_HOL_CTRL1_EG_PRI4(0x6) |
+			    QCA8386_PORT_HOL_CTRL1_EG_PRI5(0x8);
+		break;
+	default:
+		mask = QCA8386_PORT_HOL_CTRL0_EG_PRI0(0x3) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI1(0x4) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI2(0x6) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PRI3(0x8) |
+		       QCA8386_PORT_HOL_CTRL0_EG_PORT(0x3e);
+	}
+	regmap_write(priv->regmap, QCA8K_REG_PORT_HOL_CTRL0(port), mask);
+
+	hol1_mask |= QCA8386_PORT_HOL_CTRL1_ING(0x6) |
+		     QCA8K_PORT_HOL_CTRL1_EG_PRI_BUF_EN |
+		     QCA8K_PORT_HOL_CTRL1_EG_PORT_BUF_EN |
+		     QCA8K_PORT_HOL_CTRL1_WRED_EN;
+
+	regmap_update_bits(priv->regmap, QCA8K_REG_PORT_HOL_CTRL1(port),
+			   QCA8386_PORT_HOL_CTRL1_EG_PRI4_BUF_MASK |
+			   QCA8386_PORT_HOL_CTRL1_EG_PRI5_BUF_MASK |
+			   QCA8386_PORT_HOL_CTRL1_ING_BUF_MASK |
+			   QCA8K_PORT_HOL_CTRL1_EG_PRI_BUF_EN |
+			   QCA8K_PORT_HOL_CTRL1_EG_PORT_BUF_EN |
+			   QCA8K_PORT_HOL_CTRL1_WRED_EN,
+			   mask);
+}
+
 static int
 qca8k_setup(struct dsa_switch *ds)
 {
@@ -2057,6 +2099,19 @@ qca8k_setup(struct dsa_switch *ds)
 	dsa_switch_for_each_user_port(dp, ds)
 		qca8k_port_set_status(priv, dp->index, 0);
 
+	/* Enable 2 byte QCA header */
+	if (priv->switch_id == QCA8K_ID_QCA8386) {
+		ret = qca8k_rmw(priv, QCA8386_REG_SWITCH_HDR_CTRL,
+				QCA8386_REG_SWITCH_HDR_CTRL_TYPE_MASK |
+				QCA8386_REG_SWITCH_HDR_CTRL_LENGTH_SEL_MASK,
+				FIELD_PREP(QCA8386_REG_SWITCH_HDR_CTRL_TYPE_MASK,
+					   QCA8386_REG_SWITCH_HDR_CTRL_TYPE_VAL) |
+				FIELD_PREP(QCA8386_REG_SWITCH_HDR_CTRL_LENGTH_SEL_MASK,
+					   QCA8386_HEADER_LENGTH_SEL_BYTE_2));
+		if (ret)
+			return ret;
+	}
+
 	/* Enable QCA header mode on all cpu ports */
 	dsa_switch_for_each_cpu_port(dp, ds) {
 		ret = qca8k_write(priv, QCA8K_REG_PORT_HDR_CTRL(dp->index),
@@ -2117,15 +2172,42 @@ qca8k_setup(struct dsa_switch *ds)
 			return ret;
 	}
 
-	/* The port 5 of the qca8337 have some problem in flood condition. The
-	 * original legacy driver had some specific buffer and priority settings
-	 * for the different port suggested by the QCA switch team. Add this
-	 * missing settings to improve switch stability under load condition.
-	 * This problem is limited to qca8337 and other qca8k switch are not affected.
-	 */
-	if (priv->switch_id == QCA8K_ID_QCA8337)
-		dsa_switch_for_each_available_port(dp, ds)
+	dsa_switch_for_each_available_port(dp, ds) {
+
+		/* Configure ingress vlan mode of port as disabled to use the
+		 * port based member to forward packet.
+		 */
+		qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(dp->index),
+			  QCA8K_PORT_LOOKUP_VLAN_MODE_MASK,
+			  QCA8K_PORT_LOOKUP_VLAN_MODE_NONE);
+		/* Configure the egress mode of port as untouched to make the
+		 * packet egressed from the port without any changed.
+		 */
+		qca8k_rmw(priv, QCA8K_REG_PORT_VLAN_CTRL1(dp->index),
+			  QCA8K_PORT_VLAN_EGMODE_MASK,
+			  QCA8K_PORT_VLAN_EGMODE(0x3));
+
+		qca8k_rmw(priv, QCA8K_ROUTE_EGRESS_VLAN,
+			  QCA8K_ROUTE_EGRESS_VLAN_MODE_MASK(dp->index),
+			  QCA8K_ROUTE_EGRESS_VLAN_MODE(dp->index, 0x3));
+
+		switch (priv->switch_id) {
+		case QCA8K_ID_QCA8337:
+			/* The port 5 of the qca8337 have some problem in flood condition. The
+			 * original legacy driver had some specific buffer and priority settings
+			 * for the different port suggested by the QCA switch team. Add this
+			 * missing settings to improve switch stability under load condition.
+			 * This problem is limited to qca8337 and other qca8k switch are not affected.
+			 */
 			qca8k_setup_hol_fixup(priv, dp->index);
+			break;
+		case QCA8K_ID_QCA8386:
+			qca8386_setup_hol_fixup(priv, dp->index);
+			break;
+		default:
+			break;
+		}
+	}
 
 	/* Special GLOBAL_FC_THRESH value are needed for ar8327 switch */
 	if (priv->switch_id == QCA8K_ID_QCA8327) {
