@@ -61,6 +61,13 @@ config MTD_NAND_ECC_MEDIATEK
 	help
 	  This enables support for the hardware ECC engine from Mediatek.
 
+config QPIC_COMMON
+	tristate "QPIC common api file"
+	depends on ARCH_QCOM || COMPILE_TEST
+	help
+	  This enables support for common api for qpic nand controller.
+	  common apis will be used by both raw nand driver and serial nand
+	  driver.
 endmenu
 
 endmenu
