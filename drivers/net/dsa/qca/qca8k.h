@@ -28,6 +28,7 @@
 #define QCA8K_ID_QCA8327				0x12
 #define PHY_ID_QCA8337					0x004dd036
 #define QCA8K_ID_QCA8337				0x13
+#define QCA8K_ID_QCA8386				0x17
 
 #define QCA8K_QCA832X_MIB_COUNT				39
 #define QCA8K_QCA833X_MIB_COUNT				41
@@ -378,11 +379,28 @@ struct qca8k_info_ops {
 	int (*autocast_mib)(struct dsa_switch *ds, int port, u64 *data);
 };
 
+/**
+ * struct qca8k_mdio_info - qca8k register access via mdio.
+ * @split_addr: Split the MII register for MDIO access.
+ * @mdio_data_reg_inc: the register increment for accessing high 16bits data.
+ * @mdio_page_reg: The MDIO register address for setting page value.
+ *
+ * QCA8K MII register is accessed via MDIO frame, the MII register needs
+ * to be splited for the MIDO frame, qca8386 has the different reigster
+ * access method from the legacy qca8k chip such as qca8337 and qca8327.
+ */
+struct qca8k_mdio_info {
+	void (*split_addr)(u32 regaddr, u16 *r1, u16 *r2, u16 *page);
+	u8 mdio_data_reg_inc;
+	u8 mdio_page_reg;
+};
+
 struct qca8k_match_data {
 	u8 id;
 	bool reduced_package;
 	u8 mib_count;
 	const struct qca8k_info_ops *ops;
+	const struct qca8k_mdio_info *mdio_info;
 };
 
 enum {

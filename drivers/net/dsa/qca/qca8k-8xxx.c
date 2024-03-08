@@ -37,6 +37,17 @@ qca8k_split_addr(u32 regaddr, u16 *r1, u16 *r2, u16 *page)
 	*page = regaddr & 0x3ff;
 }
 
+static void qca8386_split_addr(u32 regaddr, u16 *r1, u16 *r2, u16 *page)
+{
+	*r1 = regaddr & 0x1c;
+
+	regaddr >>= 5;
+	*r2 = regaddr & 0x7;
+
+	regaddr >>= 3;
+	*page = regaddr & 0xffff;
+}
+
 static int
 qca8k_mii_write_lo(struct mii_bus *bus, int phy_id, u32 regnum, u32 val)
 {
@@ -108,18 +119,19 @@ err:
 }
 
 static int
-qca8k_mii_read32(struct mii_bus *bus, int phy_id, u32 regnum, u32 *val)
+qca8k_mii_read32(struct qca8k_priv *priv, int phy_id, u32 regnum, u32 *val)
 {
 	u32 hi, lo;
 	int ret;
 
 	*val = 0;
 
-	ret = qca8k_mii_read_lo(bus, phy_id, regnum, &lo);
+	ret = qca8k_mii_read_lo(priv->bus, phy_id, regnum, &lo);
 	if (ret < 0)
 		goto err;
 
-	ret = qca8k_mii_read_hi(bus, phy_id, regnum + 1, &hi);
+	regnum += priv->info->mdio_info->mdio_data_reg_inc;
+	ret = qca8k_mii_read_hi(priv->bus, phy_id, regnum, &hi);
 	if (ret < 0)
 		goto err;
 
@@ -130,12 +142,13 @@ err:
 }
 
 static void
-qca8k_mii_write32(struct mii_bus *bus, int phy_id, u32 regnum, u32 val)
+qca8k_mii_write32(struct qca8k_priv *priv, int phy_id, u32 regnum, u32 val)
 {
-	if (qca8k_mii_write_lo(bus, phy_id, regnum, val) < 0)
+	if (qca8k_mii_write_lo(priv->bus, phy_id, regnum, val) < 0)
 		return;
 
-	qca8k_mii_write_hi(bus, phy_id, regnum + 1, val);
+	regnum += priv->info->mdio_info->mdio_data_reg_inc;
+	qca8k_mii_write_hi(priv->bus, phy_id, regnum, val);
 }
 
 static int
@@ -145,10 +158,14 @@ qca8k_set_page(struct qca8k_priv *priv, u16 page)
 	struct mii_bus *bus = priv->bus;
 	int ret;
 
-	if (page == *cached_page)
+	/* The hardware page value may be updated by the access of
+	 * PHY register on the QCA8386 that implements the independent
+	 * PHY driver.
+	 */
+	if (page == *cached_page && priv->info->id != QCA8K_ID_QCA8386)
 		return 0;
 
-	ret = bus->write(bus, 0x18, 0, page);
+	ret = bus->write(bus, 0x18, priv->info->mdio_info->mdio_page_reg, page);
 	if (ret < 0) {
 		dev_err_ratelimited(&bus->dev,
 				    "failed to set qca8k page\n");
@@ -432,7 +449,7 @@ qca8k_read_mii(struct qca8k_priv *priv, uint32_t reg, uint32_t *val)
 	u16 r1, r2, page;
 	int ret;
 
-	qca8k_split_addr(reg, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(reg, &r1, &r2, &page);
 
 	mutex_lock_nested(&bus->mdio_lock, MDIO_MUTEX_NESTED);
 
@@ -440,7 +457,7 @@ qca8k_read_mii(struct qca8k_priv *priv, uint32_t reg, uint32_t *val)
 	if (ret < 0)
 		goto exit;
 
-	ret = qca8k_mii_read32(bus, 0x10 | r2, r1, val);
+	ret = qca8k_mii_read32(priv, 0x10 | r2, r1, val);
 
 exit:
 	mutex_unlock(&bus->mdio_lock);
@@ -454,7 +471,7 @@ qca8k_write_mii(struct qca8k_priv *priv, uint32_t reg, uint32_t val)
 	u16 r1, r2, page;
 	int ret;
 
-	qca8k_split_addr(reg, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(reg, &r1, &r2, &page);
 
 	mutex_lock_nested(&bus->mdio_lock, MDIO_MUTEX_NESTED);
 
@@ -462,7 +479,7 @@ qca8k_write_mii(struct qca8k_priv *priv, uint32_t reg, uint32_t val)
 	if (ret < 0)
 		goto exit;
 
-	qca8k_mii_write32(bus, 0x10 | r2, r1, val);
+	qca8k_mii_write32(priv, 0x10 | r2, r1, val);
 
 exit:
 	mutex_unlock(&bus->mdio_lock);
@@ -478,7 +495,7 @@ qca8k_regmap_update_bits_mii(struct qca8k_priv *priv, uint32_t reg,
 	u32 val;
 	int ret;
 
-	qca8k_split_addr(reg, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(reg, &r1, &r2, &page);
 
 	mutex_lock_nested(&bus->mdio_lock, MDIO_MUTEX_NESTED);
 
@@ -486,13 +503,13 @@ qca8k_regmap_update_bits_mii(struct qca8k_priv *priv, uint32_t reg,
 	if (ret < 0)
 		goto exit;
 
-	ret = qca8k_mii_read32(bus, 0x10 | r2, r1, &val);
+	ret = qca8k_mii_read32(priv, 0x10 | r2, r1, &val);
 	if (ret < 0)
 		goto exit;
 
 	val &= ~mask;
 	val |= write_val;
-	qca8k_mii_write32(bus, 0x10 | r2, r1, val);
+	qca8k_mii_write32(priv, 0x10 | r2, r1, val);
 
 exit:
 	mutex_unlock(&bus->mdio_lock);
@@ -581,6 +598,41 @@ static struct regmap_config qca8k_regmap_config = {
 	 * written. Disable bulk write to correctly write ATU entry.
 	 */
 	.use_single_write = true,
+};
+
+static int qca8386_regmap_read(void *ctx, unsigned int regaddr, unsigned int *val)
+{
+	struct qca8k_priv *priv = ctx;
+
+	return qca8k_read_mii(priv, regaddr, val);
+};
+
+static int qca8386_regmap_write(void *ctx, unsigned int regaddr, unsigned int val)
+{
+	struct qca8k_priv *priv = ctx;
+
+	return qca8k_write_mii(priv, regaddr, val);
+}
+
+static int
+qca386_regmap_update_bits(void *ctx, uint32_t reg, uint32_t mask, uint32_t write_val)
+{
+	struct qca8k_priv *priv = ctx;
+
+	return qca8k_regmap_update_bits_mii(priv, reg, mask, write_val);
+}
+
+static const struct regmap_config qca8386_regmap_config = {
+	.reg_base = 0xc000000,
+	.reg_bits = 28,
+	.val_bits = 32,
+	.reg_stride = 4,
+	.max_register = 0x90f064, /* end TCSR */
+	.reg_read = qca8386_regmap_read,
+	.reg_write = qca8386_regmap_write,
+	.reg_update_bits = qca386_regmap_update_bits,
+	.disable_locking = true, /* Locking is handled by qca8k read/write */
+	.cache_type = REGCACHE_NONE, /* Explicitly disable CACHE */
 };
 
 static int
@@ -793,11 +845,12 @@ err_clear_skb:
 static int
 qca8k_mdio_busy_wait(struct mii_bus *bus, u32 reg, u32 mask)
 {
+	struct qca8k_priv *priv = bus->priv;
 	u16 r1, r2, page;
-	u32 val;
 	int ret, ret1;
+	u32 val;
 
-	qca8k_split_addr(reg, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(reg, &r1, &r2, &page);
 
 	ret = read_poll_timeout(qca8k_mii_read_hi, ret1, !(val & mask), 0,
 				QCA8K_BUSY_WAIT_TIMEOUT * USEC_PER_MSEC, false,
@@ -828,7 +881,8 @@ qca8k_mdio_write(struct qca8k_priv *priv, int phy, int regnum, u16 data)
 	      QCA8K_MDIO_MASTER_REG_ADDR(regnum) |
 	      QCA8K_MDIO_MASTER_DATA(data);
 
-	qca8k_split_addr(QCA8K_MDIO_MASTER_CTRL, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(QCA8K_MDIO_MASTER_CTRL,
+					  &r1, &r2, &page);
 
 	mutex_lock_nested(&bus->mdio_lock, MDIO_MUTEX_NESTED);
 
@@ -836,14 +890,15 @@ qca8k_mdio_write(struct qca8k_priv *priv, int phy, int regnum, u16 data)
 	if (ret)
 		goto exit;
 
-	qca8k_mii_write32(bus, 0x10 | r2, r1, val);
+	qca8k_mii_write32(priv, 0x10 | r2, r1, val);
 
 	ret = qca8k_mdio_busy_wait(bus, QCA8K_MDIO_MASTER_CTRL,
 				   QCA8K_MDIO_MASTER_BUSY);
 
 exit:
 	/* even if the busy_wait timeouts try to clear the MASTER_EN */
-	qca8k_mii_write_hi(bus, 0x10 | r2, r1 + 1, 0);
+	r1 += priv->info->mdio_info->mdio_data_reg_inc;
+	qca8k_mii_write_hi(bus, 0x10 | r2, r1, 0);
 
 	mutex_unlock(&bus->mdio_lock);
 
@@ -865,7 +920,8 @@ qca8k_mdio_read(struct qca8k_priv *priv, int phy, int regnum)
 	      QCA8K_MDIO_MASTER_READ | QCA8K_MDIO_MASTER_PHY_ADDR(phy) |
 	      QCA8K_MDIO_MASTER_REG_ADDR(regnum);
 
-	qca8k_split_addr(QCA8K_MDIO_MASTER_CTRL, &r1, &r2, &page);
+	priv->info->mdio_info->split_addr(QCA8K_MDIO_MASTER_CTRL,
+					  &r1, &r2, &page);
 
 	mutex_lock_nested(&bus->mdio_lock, MDIO_MUTEX_NESTED);
 
@@ -2149,6 +2205,7 @@ static const struct dsa_switch_ops qca8k_switch_ops = {
 static int
 qca8k_sw_probe(struct mdio_device *mdiodev)
 {
+	const struct regmap_config *regmap_config = &qca8k_regmap_config;
 	struct qca8k_priv *priv;
 	int ret;
 
@@ -2176,9 +2233,12 @@ qca8k_sw_probe(struct mdio_device *mdiodev)
 		gpiod_set_value_cansleep(priv->reset_gpio, 0);
 	}
 
+	if (priv->info->id == QCA8K_ID_QCA8386)
+		regmap_config = &qca8386_regmap_config;
+
 	/* Start by setting up the register mapping */
 	priv->regmap = devm_regmap_init(&mdiodev->dev, NULL, priv,
-					&qca8k_regmap_config);
+					regmap_config);
 	if (IS_ERR(priv->regmap)) {
 		dev_err(priv->dev, "regmap initialization failed");
 		return PTR_ERR(priv->regmap);
@@ -2281,23 +2341,45 @@ static const struct qca8k_info_ops qca8xxx_ops = {
 	.autocast_mib = qca8k_get_ethtool_stats_eth,
 };
 
+static const struct qca8k_mdio_info qca8k_info = {
+	.split_addr = qca8k_split_addr,
+	.mdio_data_reg_inc = 1,
+	.mdio_page_reg = 0,
+};
+
+static const struct qca8k_mdio_info qca8386_info = {
+	.split_addr = qca8386_split_addr,
+	.mdio_data_reg_inc = 2,
+	.mdio_page_reg = 0xc,
+};
+
 static const struct qca8k_match_data qca8327 = {
 	.id = QCA8K_ID_QCA8327,
 	.reduced_package = true,
 	.mib_count = QCA8K_QCA832X_MIB_COUNT,
 	.ops = &qca8xxx_ops,
+	.mdio_info = &qca8k_info,
 };
 
 static const struct qca8k_match_data qca8328 = {
 	.id = QCA8K_ID_QCA8327,
 	.mib_count = QCA8K_QCA832X_MIB_COUNT,
 	.ops = &qca8xxx_ops,
+	.mdio_info = &qca8k_info,
 };
 
 static const struct qca8k_match_data qca833x = {
 	.id = QCA8K_ID_QCA8337,
 	.mib_count = QCA8K_QCA833X_MIB_COUNT,
 	.ops = &qca8xxx_ops,
+	.mdio_info = &qca8k_info,
+};
+
+static const struct qca8k_match_data qca8386 = {
+	.id = QCA8K_ID_QCA8386,
+	.mib_count = QCA8K_QCA833X_MIB_COUNT,
+	.ops = &qca8xxx_ops,
+	.mdio_info = &qca8386_info,
 };
 
 static const struct of_device_id qca8k_of_match[] = {
@@ -2305,6 +2387,7 @@ static const struct of_device_id qca8k_of_match[] = {
 	{ .compatible = "qca,qca8328", .data = &qca8328 },
 	{ .compatible = "qca,qca8334", .data = &qca833x },
 	{ .compatible = "qca,qca8337", .data = &qca833x },
+	{ .compatible = "qca,qca8386", .data = &qca8386 },
 	{ /* sentinel */ },
 };
 
