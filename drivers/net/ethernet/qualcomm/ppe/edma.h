@@ -7,6 +7,7 @@
 
 #include "ppe_api.h"
 #include "edma_rx.h"
+#include "edma_tx.h"
 
 /* One clock cycle = 1/(EDMA clock frequency in Mhz) micro seconds.
  *
@@ -94,8 +95,11 @@ struct edma_intr_info {
  * @intr_info: EDMA Interrupt info
  * @rxfill_rings: Rx fill Rings, SW is producer
  * @rx_rings: Rx Desc Rings, SW is consumer
+ * @tx_rings: Tx Descriptor Ring, SW is producer
+ * @txcmpl_rings: Tx complete Ring, SW is consumer
  * @rx_page_mode: Page mode enabled or disabled
  * @rx_buf_size: Rx buffer size for Jumbo MRU
+ * @tx_requeue_stop: Tx requeue stop enabled or disabled
  */
 struct edma_context {
 	struct net_device **netdev_arr;
@@ -105,8 +109,11 @@ struct edma_context {
 	struct edma_intr_info intr_info;
 	struct edma_rxfill_ring *rxfill_rings;
 	struct edma_rxdesc_ring *rx_rings;
+	struct edma_txdesc_ring *tx_rings;
+	struct edma_txcmpl_ring *txcmpl_rings;
 	u32 rx_page_mode;
 	u32 rx_buf_size;
+	bool tx_requeue_stop;
 };
 
 /* Global EDMA context */
