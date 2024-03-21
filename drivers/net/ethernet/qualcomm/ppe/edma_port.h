@@ -7,6 +7,8 @@
 
 #include "ppe_port.h"
 
+#define EDMA_PORT_MAX_CORE		4
+
 #define EDMA_NETDEV_FEATURES		(NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
@@ -35,11 +37,43 @@ struct edma_port_rx_stats {
 };
 
 /**
+ * struct edma_port_tx_stats - EDMA TX port per CPU stats for the port.
+ * @tx_pkts: Number of Tx packets
+ * @tx_bytes: Number of Tx bytes
+ * @tx_drops: Number of Tx drops
+ * @tx_nr_frag_pkts: Number of Tx nr_frag packets
+ * @tx_fraglist_pkts: Number of Tx fraglist packets
+ * @tx_fraglist_with_nr_frags_pkts:  Number of Tx packets with fraglist and nr_frags
+ * @tx_tso_pkts: Number of Tx TSO packets
+ * @tx_tso_drop_pkts: Number of Tx TSO drop packets
+ * @tx_gso_pkts: Number of Tx GSO packets
+ * @tx_gso_drop_pkts: Number of Tx GSO drop packets
+ * @tx_queue_stopped: Number of Tx queue stopped packets
+ * @syncp: Synchronization pointer
+ */
+struct edma_port_tx_stats {
+	u64 tx_pkts;
+	u64 tx_bytes;
+	u64 tx_drops;
+	u64 tx_nr_frag_pkts;
+	u64 tx_fraglist_pkts;
+	u64 tx_fraglist_with_nr_frags_pkts;
+	u64 tx_tso_pkts;
+	u64 tx_tso_drop_pkts;
+	u64 tx_gso_pkts;
+	u64 tx_gso_drop_pkts;
+	u64 tx_queue_stopped[EDMA_PORT_MAX_CORE];
+	struct u64_stats_sync syncp;
+};
+
+/**
  * struct edma_port_pcpu_stats - EDMA per cpu stats data structure for the port.
  * @rx_stats: Per CPU Rx statistics
+ * @tx_stats: Per CPU Tx statistics
  */
 struct edma_port_pcpu_stats {
 	struct edma_port_rx_stats __percpu *rx_stats;
+	struct edma_port_tx_stats __percpu *tx_stats;
 };
 
 /**
@@ -54,6 +88,7 @@ struct edma_port_priv {
 	struct ppe_port *ppe_port;
 	struct net_device *netdev;
 	struct edma_port_pcpu_stats pcpu_stats;
+	struct edma_txdesc_ring *txr_map[EDMA_PORT_MAX_CORE];
 	unsigned long flags;
 };
 
