@@ -12,11 +12,38 @@
 #include <linux/printk.h>
 
 #include "edma.h"
+#include "edma_cfg_rx.h"
 #include "edma_port.h"
 #include "ppe_regs.h"
 
 /* Number of netdev queues. */
 #define EDMA_NETDEV_QUEUE_NUM	4
+
+static int edma_port_stats_alloc(struct net_device *netdev)
+{
+	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
+
+	if (!port_priv)
+		return -EINVAL;
+
+	/* Allocate per-cpu stats memory. */
+	port_priv->pcpu_stats.rx_stats =
+		netdev_alloc_pcpu_stats(struct edma_port_rx_stats);
+	if (!port_priv->pcpu_stats.rx_stats) {
+		netdev_err(netdev, "Per-cpu EDMA Rx stats alloc failed for %s\n",
+			   netdev->name);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void edma_port_stats_free(struct net_device *netdev)
+{
+	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
+
+	free_percpu(port_priv->pcpu_stats.rx_stats);
+}
 
 static u16 __maybe_unused edma_port_select_queue(__maybe_unused struct net_device *netdev,
 						 __maybe_unused struct sk_buff *skb,
@@ -172,6 +199,7 @@ void edma_port_destroy(struct ppe_port *port)
 	int port_id = port->port_id;
 	struct net_device *netdev = edma_ctx->netdev_arr[port_id - 1];
 
+	edma_port_stats_free(netdev);
 	unregister_netdev(netdev);
 	free_netdev(netdev);
 	ppe_port_phylink_destroy(port);
@@ -232,6 +260,13 @@ int edma_port_setup(struct ppe_port *port)
 			    port_id, netdev->dev_addr);
 	}
 
+	/* Allocate memory for EDMA port statistics. */
+	ret = edma_port_stats_alloc(netdev);
+	if (ret) {
+		netdev_dbg(netdev, "EDMA port stats alloc failed\n");
+		goto stats_alloc_fail;
+	}
+
 	netdev_dbg(netdev, "Configuring the port %s(qcom-id:%d)\n",
 		   netdev->name, port_id);
 
@@ -263,8 +298,10 @@ int edma_port_setup(struct ppe_port *port)
 register_netdev_fail:
 	ppe_port_phylink_destroy(port);
 port_phylink_setup_fail:
-	free_netdev(netdev);
 	edma_ctx->netdev_arr[port_id - 1] = NULL;
+	edma_port_stats_free(netdev);
+stats_alloc_fail:
+	free_netdev(netdev);
 
 	return ret;
 }

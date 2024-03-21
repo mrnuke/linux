@@ -18,12 +18,23 @@
 #include <linux/reset.h>
 
 #include "edma.h"
+#include "edma_cfg_rx.h"
 #include "ppe_regs.h"
 
 #define EDMA_IRQ_NAME_SIZE		32
 
 /* Global EDMA context. */
 struct edma_context *edma_ctx;
+static char **edma_rxdesc_irq_name;
+
+/* Module params. */
+static int page_mode;
+module_param(page_mode, int, 0);
+MODULE_PARM_DESC(page_mode, "Enable page mode (default:0)");
+
+static int rx_buff_size;
+module_param(rx_buff_size, int, 0640);
+MODULE_PARM_DESC(rx_buff_size, "Rx Buffer size for Jumbo MRU value (default:0)");
 
 /* Priority to multi-queue mapping. */
 static u8 edma_pri_map[PPE_QUEUE_INTER_PRI_NUM] = {
@@ -178,6 +189,59 @@ static int edma_configure_ucast_prio_map_tbl(void)
 	return ret;
 }
 
+static int edma_irq_register(void)
+{
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct edma_ring_info *rx = hw_info->rx;
+	int ret;
+	u32 i;
+
+	/* Request IRQ for RXDESC rings. */
+	edma_rxdesc_irq_name = kzalloc((sizeof(char *) * rx->num_rings),
+				       GFP_KERNEL);
+	if (!edma_rxdesc_irq_name)
+		return -ENOMEM;
+
+	for (i = 0; i < rx->num_rings; i++) {
+		edma_rxdesc_irq_name[i] = kzalloc((sizeof(char *) * EDMA_IRQ_NAME_SIZE),
+						  GFP_KERNEL);
+		if (!edma_rxdesc_irq_name[i]) {
+			ret = -ENOMEM;
+			goto rxdesc_irq_name_alloc_fail;
+		}
+
+		snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d",
+			 rx->ring_start + i);
+
+		irq_set_status_flags(edma_ctx->intr_info.intr_rx[i], IRQ_DISABLE_UNLAZY);
+
+		ret = request_irq(edma_ctx->intr_info.intr_rx[i],
+				  edma_rx_handle_irq, IRQF_SHARED,
+				  edma_rxdesc_irq_name[i],
+				  (void *)&edma_ctx->rx_rings[i]);
+		if (ret) {
+			pr_err("RXDESC ring IRQ:%d request failed\n",
+			       edma_ctx->intr_info.intr_rx[i]);
+			goto rx_desc_ring_intr_req_fail;
+		}
+
+		pr_debug("RXDESC ring: %d IRQ:%d request success: %s\n",
+			 rx->ring_start + i,
+			 edma_ctx->intr_info.intr_rx[i],
+			 edma_rxdesc_irq_name[i]);
+	}
+
+	return 0;
+
+rx_desc_ring_intr_req_fail:
+	for (i = 0; i < rx->num_rings; i++)
+		kfree(edma_rxdesc_irq_name[i]);
+rxdesc_irq_name_alloc_fail:
+	kfree(edma_rxdesc_irq_name);
+
+	return ret;
+}
+
 static int edma_irq_init(void)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
@@ -256,6 +320,16 @@ static int edma_irq_init(void)
 
 	dev_dbg(dev, "%s: misc IRQ:%u\n", edma_np->name,
 		edma_ctx->intr_info.intr_misc);
+
+	return 0;
+}
+
+static int edma_alloc_rings(void)
+{
+	if (edma_cfg_rx_rings_alloc()) {
+		pr_err("Error in allocating Rx rings\n");
+		return -ENOMEM;
+	}
 
 	return 0;
 }
@@ -343,6 +417,40 @@ static int edma_hw_configure(void)
 	if (!edma_ctx->netdev_arr)
 		return -ENOMEM;
 
+	edma_ctx->dummy_dev = alloc_netdev_dummy(0);
+	if (!edma_ctx->dummy_dev) {
+		ret = -ENOMEM;
+		pr_err("Failed to allocate dummy device. ret: %d\n", ret);
+		goto dummy_dev_alloc_failed;
+	}
+
+	/* Set EDMA jumbo MRU if enabled or set page mode. */
+	if (edma_ctx->rx_buf_size) {
+		edma_ctx->rx_page_mode = false;
+		pr_debug("Rx Jumbo mru is enabled: %d\n", edma_ctx->rx_buf_size);
+	} else {
+		edma_ctx->rx_page_mode = page_mode;
+	}
+
+	ret = edma_alloc_rings();
+	if (ret) {
+		pr_err("Error in initializaing the rings. ret: %d\n", ret);
+		goto edma_alloc_rings_failed;
+	}
+
+	/* Disable interrupts. */
+	edma_cfg_rx_disable_interrupts();
+
+	edma_cfg_rx_rings_disable();
+
+	edma_cfg_rx_ring_mappings();
+
+	ret = edma_cfg_rx_rings();
+	if (ret) {
+		pr_err("Error in configuring Rx rings. ret: %d\n", ret);
+		goto edma_cfg_rx_rings_failed;
+	}
+
 	/* Configure DMA request priority, DMA read burst length,
 	 * and AXI write size.
 	 */
@@ -376,6 +484,10 @@ static int edma_hw_configure(void)
 	data |= EDMA_MISC_TX_TIMEOUT_MASK;
 	edma_ctx->intr_info.intr_mask_misc = data;
 
+	edma_cfg_rx_rings_enable();
+	edma_cfg_rx_napi_add();
+	edma_cfg_rx_napi_enable();
+
 	/* Global EDMA enable and padding enable. */
 	data = EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
 
@@ -389,11 +501,32 @@ static int edma_hw_configure(void)
 	if (ret) {
 		pr_err("Failed to initialize unicast priority map table: %d\n",
 		       ret);
-		kfree(edma_ctx->netdev_arr);
-		return ret;
+		goto configure_ucast_prio_map_tbl_failed;
+	}
+
+	/* Initialize RPS hash map table. */
+	ret = edma_cfg_rx_rps_hash_map();
+	if (ret) {
+		pr_err("Failed to configure rps hash table: %d\n",
+		       ret);
+		goto edma_cfg_rx_rps_hash_map_failed;
 	}
 
 	return 0;
+
+edma_cfg_rx_rps_hash_map_failed:
+configure_ucast_prio_map_tbl_failed:
+	edma_cfg_rx_napi_disable();
+	edma_cfg_rx_napi_delete();
+	edma_cfg_rx_rings_disable();
+edma_cfg_rx_rings_failed:
+	edma_cfg_rx_rings_cleanup();
+edma_alloc_rings_failed:
+	free_netdev(edma_ctx->dummy_dev);
+dummy_dev_alloc_failed:
+	kfree(edma_ctx->netdev_arr);
+
+	return ret;
 }
 
 /**
@@ -404,8 +537,31 @@ static int edma_hw_configure(void)
  */
 void edma_destroy(struct ppe_device *ppe_dev)
 {
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct edma_ring_info *rx = hw_info->rx;
+	u32 i;
+
+	/* Disable interrupts. */
+	edma_cfg_rx_disable_interrupts();
+
+	/* Free IRQ for RXDESC rings. */
+	for (i = 0; i < rx->num_rings; i++) {
+		synchronize_irq(edma_ctx->intr_info.intr_rx[i]);
+		free_irq(edma_ctx->intr_info.intr_rx[i],
+			 (void *)&edma_ctx->rx_rings[i]);
+		kfree(edma_rxdesc_irq_name[i]);
+	}
+	kfree(edma_rxdesc_irq_name);
+
 	kfree(edma_ctx->intr_info.intr_rx);
 	kfree(edma_ctx->intr_info.intr_txcmpl);
+
+	edma_cfg_rx_napi_disable();
+	edma_cfg_rx_napi_delete();
+	edma_cfg_rx_rings_disable();
+	edma_cfg_rx_rings_cleanup();
+
+	free_netdev(edma_ctx->dummy_dev);
 	kfree(edma_ctx->netdev_arr);
 }
 
@@ -428,6 +584,7 @@ int edma_setup(struct ppe_device *ppe_dev)
 
 	edma_ctx->hw_info = &ipq9574_hw_info;
 	edma_ctx->ppe_dev = ppe_dev;
+	edma_ctx->rx_buf_size = rx_buff_size;
 
 	/* Configure the EDMA common clocks. */
 	ret = edma_clock_init();
@@ -449,6 +606,16 @@ int edma_setup(struct ppe_device *ppe_dev)
 		dev_err(dev, "Error in irq initialization\n");
 		return ret;
 	}
+
+	ret = edma_irq_register();
+	if (ret) {
+		dev_err(dev, "Error in irq registration\n");
+		kfree(edma_ctx->intr_info.intr_rx);
+		kfree(edma_ctx->intr_info.intr_txcmpl);
+		return ret;
+	}
+
+	edma_cfg_rx_enable_interrupts();
 
 	dev_info(dev, "EDMA configuration successful\n");
 
@@ -477,4 +644,47 @@ int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
 
 	return ppe_queue_ucast_offset_hash_set(ppe_dev, 0,
 					       index, queue_offset);
+}
+
+/**
+ * ppe_edma_queue_resource_get - Get EDMA queue resource
+ * @ppe_dev: PPE device
+ * @type: Resource type
+ * @res_start: Resource start ID returned
+ * @res_end: Resource end ID returned
+ *
+ * PPE EDMA queue resource includes unicast queue and multicast queue.
+ *
+ * Return 0 on success, negative error code on failure.
+ */
+int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
+				int *res_start, int *res_end)
+{
+	if (type != PPE_RES_UCAST && type != PPE_RES_MCAST)
+		return -EINVAL;
+
+	return ppe_port_resource_get(ppe_dev, 0, type, res_start, res_end);
+};
+
+/**
+ * ppe_edma_ring_to_queues_config - Map EDMA ring to PPE queues
+ * @ppe_dev: PPE device
+ * @ring_id: EDMA ring ID
+ * @num: Number of queues mapped to EDMA ring
+ * @queues: PPE queue IDs
+ *
+ * PPE queues are configured to map with the special EDMA ring ID.
+ *
+ * Return 0 on success, negative error code on failure.
+ */
+int ppe_edma_ring_to_queues_config(struct ppe_device *ppe_dev, int ring_id,
+				   int num, int queues[] __counted_by(num))
+{
+	u32 queue_bmap[PPE_RING_TO_QUEUE_BITMAP_WORD_CNT] = {};
+	int index;
+
+	for (index = 0; index < num; index++)
+		queue_bmap[queues[index] / 32] |= BIT_MASK(queues[index] % 32);
+
+	return ppe_ring_queue_map_set(ppe_dev, ring_id, queue_bmap);
 }
