@@ -13,6 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/rtnetlink.h>
 
+#include "edma_port.h"
 #include "ppe.h"
 #include "ppe_port.h"
 #include "ppe_regs.h"
@@ -1277,11 +1278,25 @@ int ppe_port_mac_init(struct ppe_device *ppe_dev)
 			goto err_port_node;
 		}
 
+		ret = edma_port_setup(&ppe_ports->port[i]);
+		if (ret) {
+			dev_err(ppe_dev->dev, "QCOM EDMA port setup failed\n");
+			i--;
+			goto err_port_setup;
+		}
+
 		i++;
 	}
 
 	of_node_put(ports_node);
 	return 0;
+
+err_port_setup:
+	/* Destroy edma ports created till now */
+	while (i >= 0) {
+		edma_port_destroy(&ppe_ports->port[i]);
+		i--;
+	}
 
 err_port_clk:
 	for (j = 0; j < i; j++)
@@ -1307,6 +1322,10 @@ void ppe_port_mac_deinit(struct ppe_device *ppe_dev)
 
 	for (i = 0; i < ppe_dev->ports->num; i++) {
 		ppe_port = &ppe_dev->ports->port[i];
+
+		/* Destroy all phylinks and edma ports */
+		edma_port_destroy(ppe_port);
+
 		ppe_port_clock_deinit(ppe_port);
 	}
 }
