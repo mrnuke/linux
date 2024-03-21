@@ -18,6 +18,7 @@
 #include <linux/reset.h>
 
 #include "edma.h"
+#include "edma_cfg_tx.h"
 #include "edma_cfg_rx.h"
 #include "ppe_regs.h"
 
@@ -25,6 +26,7 @@
 
 /* Global EDMA context. */
 struct edma_context *edma_ctx;
+static char **edma_txcmpl_irq_name;
 static char **edma_rxdesc_irq_name;
 
 /* Module params. */
@@ -192,22 +194,59 @@ static int edma_configure_ucast_prio_map_tbl(void)
 static int edma_irq_register(void)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct edma_ring_info *txcmpl = hw_info->txcmpl;
 	struct edma_ring_info *rx = hw_info->rx;
 	int ret;
 	u32 i;
 
+	/* Request IRQ for TXCMPL rings. */
+	edma_txcmpl_irq_name = kzalloc((sizeof(char *) * txcmpl->num_rings), GFP_KERNEL);
+	if (!edma_txcmpl_irq_name)
+		return -ENOMEM;
+
+	for (i = 0; i < txcmpl->num_rings; i++) {
+		edma_txcmpl_irq_name[i] = kzalloc((sizeof(char *) * EDMA_IRQ_NAME_SIZE),
+						  GFP_KERNEL);
+		if (!edma_txcmpl_irq_name[i]) {
+			ret = -ENOMEM;
+			goto txcmpl_ring_irq_name_alloc_fail;
+		}
+
+		snprintf(edma_txcmpl_irq_name[i], EDMA_IRQ_NAME_SIZE, "edma_txcmpl_%d",
+			 txcmpl->ring_start + i);
+
+		irq_set_status_flags(edma_ctx->intr_info.intr_txcmpl[i], IRQ_DISABLE_UNLAZY);
+
+		ret = request_irq(edma_ctx->intr_info.intr_txcmpl[i],
+				  edma_tx_handle_irq, IRQF_SHARED,
+				  edma_txcmpl_irq_name[i],
+				  (void *)&edma_ctx->txcmpl_rings[i]);
+		if (ret) {
+			pr_err("TXCMPL ring IRQ:%d request %d failed\n",
+			       edma_ctx->intr_info.intr_txcmpl[i], i);
+			goto txcmpl_ring_intr_req_fail;
+		}
+
+		pr_debug("TXCMPL ring: %d IRQ:%d request success: %s\n",
+			 txcmpl->ring_start + i,
+			 edma_ctx->intr_info.intr_txcmpl[i],
+			 edma_txcmpl_irq_name[i]);
+	}
+
 	/* Request IRQ for RXDESC rings. */
 	edma_rxdesc_irq_name = kzalloc((sizeof(char *) * rx->num_rings),
 				       GFP_KERNEL);
-	if (!edma_rxdesc_irq_name)
-		return -ENOMEM;
+	if (!edma_rxdesc_irq_name) {
+		ret = -ENOMEM;
+		goto rxdesc_irq_name_alloc_fail;
+	}
 
 	for (i = 0; i < rx->num_rings; i++) {
 		edma_rxdesc_irq_name[i] = kzalloc((sizeof(char *) * EDMA_IRQ_NAME_SIZE),
 						  GFP_KERNEL);
 		if (!edma_rxdesc_irq_name[i]) {
 			ret = -ENOMEM;
-			goto rxdesc_irq_name_alloc_fail;
+			goto rxdesc_ring_irq_name_alloc_fail;
 		}
 
 		snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d",
@@ -236,8 +275,19 @@ static int edma_irq_register(void)
 rx_desc_ring_intr_req_fail:
 	for (i = 0; i < rx->num_rings; i++)
 		kfree(edma_rxdesc_irq_name[i]);
-rxdesc_irq_name_alloc_fail:
+rxdesc_ring_irq_name_alloc_fail:
 	kfree(edma_rxdesc_irq_name);
+rxdesc_irq_name_alloc_fail:
+	for (i = 0; i < txcmpl->num_rings; i++) {
+		synchronize_irq(edma_ctx->intr_info.intr_txcmpl[i]);
+		free_irq(edma_ctx->intr_info.intr_txcmpl[i],
+			 (void *)&edma_ctx->txcmpl_rings[i]);
+	}
+txcmpl_ring_intr_req_fail:
+	for (i = 0; i < txcmpl->num_rings; i++)
+		kfree(edma_txcmpl_irq_name[i]);
+txcmpl_ring_irq_name_alloc_fail:
+	kfree(edma_txcmpl_irq_name);
 
 	return ret;
 }
@@ -326,12 +376,22 @@ static int edma_irq_init(void)
 
 static int edma_alloc_rings(void)
 {
-	if (edma_cfg_rx_rings_alloc()) {
-		pr_err("Error in allocating Rx rings\n");
+	if (edma_cfg_tx_rings_alloc()) {
+		pr_err("Error in allocating Tx rings\n");
 		return -ENOMEM;
 	}
 
+	if (edma_cfg_rx_rings_alloc()) {
+		pr_err("Error in allocating Rx rings\n");
+		goto rx_rings_alloc_fail;
+	}
+
 	return 0;
+
+rx_rings_alloc_fail:
+	edma_cfg_tx_rings_cleanup();
+
+	return -ENOMEM;
 }
 
 static int edma_hw_reset(void)
@@ -389,7 +449,7 @@ static int edma_hw_configure(void)
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct regmap *regmap = ppe_dev->regmap;
-	u32 data, reg;
+	u32 data, reg, i;
 	int ret;
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_MAS_CTRL_ADDR;
@@ -439,11 +499,17 @@ static int edma_hw_configure(void)
 	}
 
 	/* Disable interrupts. */
+	for (i = 1; i <= hw_info->max_ports; i++)
+		edma_cfg_tx_disable_interrupts(i);
+
 	edma_cfg_rx_disable_interrupts();
 
 	edma_cfg_rx_rings_disable();
 
 	edma_cfg_rx_ring_mappings();
+	edma_cfg_tx_ring_mappings();
+
+	edma_cfg_tx_rings();
 
 	ret = edma_cfg_rx_rings();
 	if (ret) {
@@ -520,6 +586,7 @@ configure_ucast_prio_map_tbl_failed:
 	edma_cfg_rx_napi_delete();
 	edma_cfg_rx_rings_disable();
 edma_cfg_rx_rings_failed:
+	edma_cfg_tx_rings_cleanup();
 	edma_cfg_rx_rings_cleanup();
 edma_alloc_rings_failed:
 	free_netdev(edma_ctx->dummy_dev);
@@ -538,13 +605,27 @@ dummy_dev_alloc_failed:
 void edma_destroy(struct ppe_device *ppe_dev)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct edma_ring_info *txcmpl = hw_info->txcmpl;
 	struct edma_ring_info *rx = hw_info->rx;
 	u32 i;
 
 	/* Disable interrupts. */
+	for (i = 1; i <= hw_info->max_ports; i++)
+		edma_cfg_tx_disable_interrupts(i);
+
 	edma_cfg_rx_disable_interrupts();
 
-	/* Free IRQ for RXDESC rings. */
+	/* Free IRQ for TXCMPL rings. */
+	for (i = 0; i < txcmpl->num_rings; i++) {
+		synchronize_irq(edma_ctx->intr_info.intr_txcmpl[i]);
+
+		free_irq(edma_ctx->intr_info.intr_txcmpl[i],
+			 (void *)&edma_ctx->txcmpl_rings[i]);
+		kfree(edma_txcmpl_irq_name[i]);
+	}
+	kfree(edma_txcmpl_irq_name);
+
+	/* Free IRQ for RXDESC rings */
 	for (i = 0; i < rx->num_rings; i++) {
 		synchronize_irq(edma_ctx->intr_info.intr_rx[i]);
 		free_irq(edma_ctx->intr_info.intr_rx[i],
@@ -560,6 +641,7 @@ void edma_destroy(struct ppe_device *ppe_dev)
 	edma_cfg_rx_napi_delete();
 	edma_cfg_rx_rings_disable();
 	edma_cfg_rx_rings_cleanup();
+	edma_cfg_tx_rings_cleanup();
 
 	free_netdev(edma_ctx->dummy_dev);
 	kfree(edma_ctx->netdev_arr);
@@ -585,6 +667,7 @@ int edma_setup(struct ppe_device *ppe_dev)
 	edma_ctx->hw_info = &ipq9574_hw_info;
 	edma_ctx->ppe_dev = ppe_dev;
 	edma_ctx->rx_buf_size = rx_buff_size;
+	edma_ctx->tx_requeue_stop = false;
 
 	/* Configure the EDMA common clocks. */
 	ret = edma_clock_init();
