@@ -152,6 +152,42 @@ static int edma_clock_init(void)
 }
 
 /**
+ * edma_err_stats_alloc - Allocate stats memory
+ *
+ * Allocate memory for per-CPU error stats.
+ */
+int edma_err_stats_alloc(void)
+{
+	u32 i;
+
+	edma_ctx->err_stats = alloc_percpu(*edma_ctx->err_stats);
+	if (!edma_ctx->err_stats)
+		return -ENOMEM;
+
+	for_each_possible_cpu(i) {
+		struct edma_err_stats *stats;
+
+		stats = per_cpu_ptr(edma_ctx->err_stats, i);
+		u64_stats_init(&stats->syncp);
+	}
+
+	return 0;
+}
+
+/**
+ * edma_err_stats_free - Free stats memory
+ *
+ * Free memory of per-CPU error stats.
+ */
+void edma_err_stats_free(void)
+{
+	if (edma_ctx->err_stats) {
+		free_percpu(edma_ctx->err_stats);
+		edma_ctx->err_stats = NULL;
+	}
+}
+
+/**
  * edma_configure_ucast_prio_map_tbl - Configure unicast priority map table.
  *
  * Map int_priority values to priority class and initialize
@@ -191,11 +227,113 @@ static int edma_configure_ucast_prio_map_tbl(void)
 	return ret;
 }
 
+static void edma_disable_misc_interrupt(void)
+{
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	u32 reg;
+
+	reg = EDMA_BASE_OFFSET + EDMA_REG_MISC_INT_MASK_ADDR;
+	regmap_write(regmap, reg, EDMA_MASK_INT_CLEAR);
+}
+
+static void edma_enable_misc_interrupt(void)
+{
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	u32 reg;
+
+	reg = EDMA_BASE_OFFSET + EDMA_REG_MISC_INT_MASK_ADDR;
+	regmap_write(regmap, reg, edma_ctx->intr_info.intr_mask_misc);
+}
+
+static irqreturn_t edma_misc_handle_irq(int irq,
+					__maybe_unused void *ctx)
+{
+	struct edma_err_stats *stats = this_cpu_ptr(edma_ctx->err_stats);
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	u32 misc_intr_status, data, reg;
+
+	/* Read Misc intr status */
+	reg = EDMA_BASE_OFFSET + EDMA_REG_MISC_INT_STAT_ADDR;
+	regmap_read(regmap, reg, &data);
+	misc_intr_status = data & edma_ctx->intr_info.intr_mask_misc;
+
+	pr_debug("Received misc irq %d, status: %d\n", irq, misc_intr_status);
+
+	if (FIELD_GET(EDMA_MISC_AXI_RD_ERR_MASK, misc_intr_status)) {
+		pr_err("MISC AXI read error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_axi_read_err;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_AXI_WR_ERR_MASK, misc_intr_status)) {
+		pr_err("MISC AXI write error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_axi_write_err;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_RX_DESC_FIFO_FULL_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC Rx descriptor fifo full error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_rxdesc_fifo_full;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_RX_ERR_BUF_SIZE_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC Rx buffer size error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_rx_buf_size_err;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_TX_SRAM_FULL_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC Tx SRAM full error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_tx_sram_full;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_TX_CMPL_BUF_FULL_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC Tx complete buffer full error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_txcmpl_buf_full;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_DATA_LEN_ERR_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC data length error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_tx_data_len_err;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (FIELD_GET(EDMA_MISC_TX_TIMEOUT_MASK, misc_intr_status)) {
+		if (net_ratelimit())
+			pr_err("MISC Tx timeout error received\n");
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_tx_timeout;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int edma_irq_register(void)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
 	struct edma_ring_info *txcmpl = hw_info->txcmpl;
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct edma_ring_info *rx = hw_info->rx;
+	struct device *dev = ppe_dev->dev;
 	int ret;
 	u32 i;
 
@@ -270,8 +408,25 @@ static int edma_irq_register(void)
 			 edma_rxdesc_irq_name[i]);
 	}
 
+	/* Request Misc IRQ */
+	ret = request_irq(edma_ctx->intr_info.intr_misc, edma_misc_handle_irq,
+			  IRQF_SHARED, "edma_misc",
+			  (void *)dev);
+	if (ret) {
+		pr_err("MISC IRQ:%d request failed\n",
+		       edma_ctx->intr_info.intr_misc);
+		goto misc_intr_req_fail;
+	}
+
 	return 0;
 
+misc_intr_req_fail:
+	/* Free IRQ for RXDESC rings */
+	for (i = 0; i < rx->num_rings; i++) {
+		synchronize_irq(edma_ctx->intr_info.intr_rx[i]);
+		free_irq(edma_ctx->intr_info.intr_rx[i],
+			 (void *)&edma_ctx->rx_rings[i]);
+	}
 rx_desc_ring_intr_req_fail:
 	for (i = 0; i < rx->num_rings; i++)
 		kfree(edma_rxdesc_irq_name[i]);
@@ -503,6 +658,7 @@ static int edma_hw_configure(void)
 		edma_cfg_tx_disable_interrupts(i);
 
 	edma_cfg_rx_disable_interrupts();
+	edma_disable_misc_interrupt();
 
 	edma_cfg_rx_rings_disable();
 
@@ -614,6 +770,7 @@ void edma_destroy(struct ppe_device *ppe_dev)
 		edma_cfg_tx_disable_interrupts(i);
 
 	edma_cfg_rx_disable_interrupts();
+	edma_disable_misc_interrupt();
 
 	/* Free IRQ for TXCMPL rings. */
 	for (i = 0; i < txcmpl->num_rings; i++) {
@@ -633,6 +790,10 @@ void edma_destroy(struct ppe_device *ppe_dev)
 		kfree(edma_rxdesc_irq_name[i]);
 	}
 	kfree(edma_rxdesc_irq_name);
+
+	/* Free Misc IRQ */
+	synchronize_irq(edma_ctx->intr_info.intr_misc);
+	free_irq(edma_ctx->intr_info.intr_misc, (void *)(ppe_dev->dev));
 
 	kfree(edma_ctx->intr_info.intr_rx);
 	kfree(edma_ctx->intr_info.intr_txcmpl);
@@ -699,6 +860,7 @@ int edma_setup(struct ppe_device *ppe_dev)
 	}
 
 	edma_cfg_rx_enable_interrupts();
+	edma_enable_misc_interrupt();
 
 	dev_info(dev, "EDMA configuration successful\n");
 
