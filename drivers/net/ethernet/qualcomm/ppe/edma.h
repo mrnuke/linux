@@ -26,6 +26,9 @@
 /* Number of PPE queue priorities supported per ARM core. */
 #define EDMA_PRI_MAX_PER_CORE	8
 
+/* Interface ID start. */
+#define EDMA_START_IFNUM   1
+
 /**
  * enum ppe_queue_class_type - PPE queue class type
  * @PPE_QUEUE_CLASS_PRIORITY: Queue offset configured from internal priority
