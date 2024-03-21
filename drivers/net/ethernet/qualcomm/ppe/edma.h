@@ -6,6 +6,7 @@
 #define __EDMA_MAIN__
 
 #include "ppe_api.h"
+#include "edma_rx.h"
 
 /* One clock cycle = 1/(EDMA clock frequency in Mhz) micro seconds.
  *
@@ -28,6 +29,11 @@
 
 /* Interface ID start. */
 #define EDMA_START_IFNUM   1
+
+#define EDMA_DESC_AVAIL_COUNT(head, tail, _max) ({ \
+			typeof(_max) (max) = (_max); \
+			((((head) - (tail)) + \
+			(max)) & ((max) - 1)); })
 
 /**
  * struct edma_ring_info - EDMA ring data structure.
@@ -82,18 +88,28 @@ struct edma_intr_info {
 /**
  * struct edma_context - EDMA context.
  * @netdev_arr: Net device for each EDMA port
+ * @dummy_dev: Dummy netdevice for RX DMA
  * @ppe_dev: PPE device
  * @hw_info: EDMA Hardware info
  * @intr_info: EDMA Interrupt info
+ * @rxfill_rings: Rx fill Rings, SW is producer
+ * @rx_rings: Rx Desc Rings, SW is consumer
+ * @rx_page_mode: Page mode enabled or disabled
+ * @rx_buf_size: Rx buffer size for Jumbo MRU
  */
 struct edma_context {
 	struct net_device **netdev_arr;
+	struct net_device *dummy_dev;
 	struct ppe_device *ppe_dev;
 	struct edma_hw_info *hw_info;
 	struct edma_intr_info intr_info;
+	struct edma_rxfill_ring *rxfill_rings;
+	struct edma_rxdesc_ring *rx_rings;
+	u32 rx_page_mode;
+	u32 rx_buf_size;
 };
 
-/* Global EDMA context. */
+/* Global EDMA context */
 extern struct edma_context *edma_ctx;
 
 void edma_destroy(struct ppe_device *ppe_dev);
