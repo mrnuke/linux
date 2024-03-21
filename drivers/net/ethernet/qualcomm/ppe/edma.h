@@ -37,6 +37,30 @@
 			(max)) & ((max) - 1)); })
 
 /**
+ * struct edma_err_stats - EDMA error stats
+ * @edma_axi_read_err: AXI read error
+ * @edma_axi_write_err: AXI write error
+ * @edma_rxdesc_fifo_full: Rx desc FIFO full error
+ * @edma_rx_buf_size_err: Rx buffer size too small error
+ * @edma_tx_sram_full: Tx packet SRAM buffer full error
+ * @edma_tx_data_len_err: Tx data length error
+ * @edma_tx_timeout: Tx timeout error
+ * @edma_txcmpl_buf_full: Tx completion buffer full error
+ * @syncp: Synchronization pointer
+ */
+struct edma_err_stats {
+	u64 edma_axi_read_err;
+	u64 edma_axi_write_err;
+	u64 edma_rxdesc_fifo_full;
+	u64 edma_rx_buf_size_err;
+	u64 edma_tx_sram_full;
+	u64 edma_tx_data_len_err;
+	u64 edma_tx_timeout;
+	u64 edma_txcmpl_buf_full;
+	struct u64_stats_sync syncp;
+};
+
+/**
  * struct edma_ring_info - EDMA ring data structure.
  * @max_rings: Maximum number of rings
  * @ring_start: Ring start ID
@@ -97,6 +121,7 @@ struct edma_intr_info {
  * @rx_rings: Rx Desc Rings, SW is consumer
  * @tx_rings: Tx Descriptor Ring, SW is producer
  * @txcmpl_rings: Tx complete Ring, SW is consumer
+ * @err_stats: Per CPU error statistics
  * @rx_page_mode: Page mode enabled or disabled
  * @rx_buf_size: Rx buffer size for Jumbo MRU
  * @tx_requeue_stop: Tx requeue stop enabled or disabled
@@ -111,6 +136,7 @@ struct edma_context {
 	struct edma_rxdesc_ring *rx_rings;
 	struct edma_txdesc_ring *tx_rings;
 	struct edma_txcmpl_ring *txcmpl_rings;
+	struct edma_err_stats __percpu *err_stats;
 	u32 rx_page_mode;
 	u32 rx_buf_size;
 	bool tx_requeue_stop;
@@ -119,7 +145,10 @@ struct edma_context {
 /* Global EDMA context */
 extern struct edma_context *edma_ctx;
 
+int edma_err_stats_alloc(void);
+void edma_err_stats_free(void);
 void edma_destroy(struct ppe_device *ppe_dev);
 int edma_setup(struct ppe_device *ppe_dev);
-
+void edma_debugfs_teardown(void);
+int edma_debugfs_setup(struct ppe_device *ppe_dev);
 #endif
