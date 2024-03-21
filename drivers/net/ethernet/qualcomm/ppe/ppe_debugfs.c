@@ -9,9 +9,11 @@
 #include <linux/debugfs.h>
 #include <linux/dev_printk.h>
 #include <linux/device.h>
+#include <linux/netdevice.h>
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
 
+#include "edma.h"
 #include "ppe.h"
 #include "ppe_config.h"
 #include "ppe_debugfs.h"
@@ -820,11 +822,14 @@ DEFINE_SHOW_STORE_ATTRIBUTE(ppe_packet_counter);
 void ppe_debugfs_setup(struct ppe_device *ppe_dev)
 {
 	struct ppe_debugfs_entry *entry;
+	int ret;
 	int i;
 
 	ppe_dev->debugfs_root = debugfs_create_dir("ppe", NULL);
-	if (IS_ERR(ppe_dev->debugfs_root))
+	if (IS_ERR(ppe_dev->debugfs_root)) {
+		dev_err(ppe_dev->dev, "Error in PPE debugfs setup\n");
 		return;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(debugfs_files); i++) {
 		entry = devm_kzalloc(ppe_dev->dev, sizeof(*entry), GFP_KERNEL);
@@ -837,6 +842,14 @@ void ppe_debugfs_setup(struct ppe_device *ppe_dev)
 		debugfs_create_file(debugfs_files[i].name, 0444,
 				    ppe_dev->debugfs_root, entry,
 				    &ppe_packet_counter_fops);
+	}
+
+	/* TODO: Do we have to be so agressive and remove __all__ debugfs entries? */
+	ret = edma_debugfs_setup(ppe_dev);
+	if (ret) {
+		dev_err(ppe_dev->dev, "Error in EDMA debugfs setup API. ret: %d\n", ret);
+		debugfs_remove_recursive(ppe_dev->debugfs_root);
+		ppe_dev->debugfs_root = NULL;
 	}
 }
 
