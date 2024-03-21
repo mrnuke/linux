@@ -26,6 +26,9 @@
 /* Number of PPE queue priorities supported per ARM core. */
 #define EDMA_PRI_MAX_PER_CORE	8
 
+/* Interface ID start. */
+#define EDMA_START_IFNUM   1
+
 /**
  * struct edma_ring_info - EDMA ring data structure.
  * @max_rings: Maximum number of rings
