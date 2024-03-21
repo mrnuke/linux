@@ -13,6 +13,7 @@
 
 #include "edma.h"
 #include "edma_cfg_rx.h"
+#include "edma_cfg_tx.h"
 #include "edma_port.h"
 #include "ppe_regs.h"
 
@@ -35,6 +36,15 @@ static int edma_port_stats_alloc(struct net_device *netdev)
 		return -ENOMEM;
 	}
 
+	port_priv->pcpu_stats.tx_stats =
+		netdev_alloc_pcpu_stats(struct edma_port_tx_stats);
+	if (!port_priv->pcpu_stats.tx_stats) {
+		netdev_err(netdev, "Per-cpu EDMA Tx stats alloc failed for %s\n",
+			   netdev->name);
+		free_percpu(port_priv->pcpu_stats.rx_stats);
+		return -ENOMEM;
+	}
+
 	return 0;
 }
 
@@ -43,6 +53,28 @@ static void edma_port_stats_free(struct net_device *netdev)
 	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
 
 	free_percpu(port_priv->pcpu_stats.rx_stats);
+	free_percpu(port_priv->pcpu_stats.tx_stats);
+}
+
+static void edma_port_configure(struct net_device *netdev)
+{
+	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
+	struct ppe_port *port =  port_priv->ppe_port;
+	int port_id = port->port_id;
+
+	edma_cfg_tx_fill_per_port_tx_map(netdev, port_id);
+	edma_cfg_tx_rings_enable(port_id);
+	edma_cfg_tx_napi_add(netdev, port_id);
+}
+
+static void edma_port_deconfigure(struct net_device *netdev)
+{
+	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
+	struct ppe_port *port =  port_priv->ppe_port;
+	int port_id = port->port_id;
+
+	edma_cfg_tx_napi_delete(port_id);
+	edma_cfg_tx_rings_disable(port_id);
 }
 
 static u16 __maybe_unused edma_port_select_queue(__maybe_unused struct net_device *netdev,
@@ -60,6 +92,7 @@ static int edma_port_open(struct net_device *netdev)
 {
 	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
 	struct ppe_port *ppe_port;
+	int port_id;
 
 	if (!port_priv)
 		return -EINVAL;
@@ -74,9 +107,13 @@ static int edma_port_open(struct net_device *netdev)
 	netdev->wanted_features |= EDMA_NETDEV_FEATURES;
 
 	ppe_port  = port_priv->ppe_port;
+	port_id = ppe_port->port_id;
 
 	if (ppe_port->phylink)
 		phylink_start(ppe_port->phylink);
+
+	edma_cfg_tx_napi_enable(port_id);
+	edma_cfg_tx_enable_interrupts(port_id);
 
 	netif_start_queue(netdev);
 
@@ -87,13 +124,21 @@ static int edma_port_close(struct net_device *netdev)
 {
 	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
 	struct ppe_port *ppe_port;
+	int port_id;
 
 	if (!port_priv)
 		return -EINVAL;
 
 	netif_stop_queue(netdev);
 
+	/* 20ms delay would provide a plenty of margin to take care of in-flight packets. */
+	msleep(20);
+
 	ppe_port  = port_priv->ppe_port;
+	port_id = ppe_port->port_id;
+
+	edma_cfg_tx_disable_interrupts(port_id);
+	edma_cfg_tx_napi_disable(port_id);
 
 	/* Phylink close. */
 	if (ppe_port->phylink)
@@ -135,6 +180,92 @@ static netdev_features_t edma_port_feature_check(__maybe_unused struct sk_buff *
 						 netdev_features_t features)
 {
 	return features;
+}
+
+static netdev_tx_t edma_port_xmit(struct sk_buff *skb,
+				  struct net_device *dev)
+{
+	struct edma_port_priv *port_priv = NULL;
+	struct edma_port_pcpu_stats *pcpu_stats;
+	struct edma_txdesc_ring *txdesc_ring;
+	struct edma_port_tx_stats *stats;
+	enum edma_tx_gso_status result;
+	struct sk_buff *segs = NULL;
+	u8 cpu_id;
+	u32 skbq;
+	int ret;
+
+	if (!skb || !dev)
+		return NETDEV_TX_OK;
+
+	port_priv = netdev_priv(dev);
+
+	/* Select a TX ring. */
+	skbq = (skb_get_queue_mapping(skb) & (num_possible_cpus() - 1));
+
+	txdesc_ring = (struct edma_txdesc_ring *)port_priv->txr_map[skbq];
+
+	pcpu_stats = &port_priv->pcpu_stats;
+	stats = this_cpu_ptr(pcpu_stats->tx_stats);
+
+	/* HW does not support TSO for packets with more than or equal to
+	 * 32 segments. Perform SW GSO for such packets.
+	 */
+	result = edma_tx_gso_segment(skb, dev, &segs);
+	if (likely(result == EDMA_TX_GSO_NOT_NEEDED)) {
+		/* Transmit the packet. */
+		ret = edma_tx_ring_xmit(dev, skb, txdesc_ring, stats);
+
+		if (unlikely(ret == EDMA_TX_FAIL_NO_DESC)) {
+			if (likely(!edma_ctx->tx_requeue_stop)) {
+				cpu_id = smp_processor_id();
+				netdev_dbg(dev, "Stopping tx queue due to lack oftx descriptors\n");
+				u64_stats_update_begin(&stats->syncp);
+				++stats->tx_queue_stopped[cpu_id];
+				u64_stats_update_end(&stats->syncp);
+				netif_tx_stop_queue(netdev_get_tx_queue(dev, skbq));
+				return NETDEV_TX_BUSY;
+			}
+		}
+
+		if (unlikely(ret != EDMA_TX_OK)) {
+			dev_kfree_skb_any(skb);
+			u64_stats_update_begin(&stats->syncp);
+			++stats->tx_drops;
+			u64_stats_update_end(&stats->syncp);
+		}
+
+		return NETDEV_TX_OK;
+	} else if (unlikely(result == EDMA_TX_GSO_FAIL)) {
+		netdev_dbg(dev, "%p: SW GSO failed for segment size: %d\n",
+			   skb, skb_shinfo(skb)->gso_segs);
+		dev_kfree_skb_any(skb);
+		u64_stats_update_begin(&stats->syncp);
+		++stats->tx_gso_drop_pkts;
+		u64_stats_update_end(&stats->syncp);
+		return NETDEV_TX_OK;
+	}
+
+	u64_stats_update_begin(&stats->syncp);
+	++stats->tx_gso_pkts;
+	u64_stats_update_end(&stats->syncp);
+
+	dev_kfree_skb_any(skb);
+	while (segs) {
+		skb = segs;
+		segs = segs->next;
+
+		/* Transmit the packet. */
+		ret = edma_tx_ring_xmit(dev, skb, txdesc_ring, stats);
+		if (unlikely(ret != EDMA_TX_OK)) {
+			dev_kfree_skb_any(skb);
+			u64_stats_update_begin(&stats->syncp);
+			++stats->tx_drops;
+			u64_stats_update_end(&stats->syncp);
+		}
+	}
+
+	return NETDEV_TX_OK;
 }
 
 static void edma_port_get_stats64(struct net_device *netdev,
@@ -179,6 +310,7 @@ static int edma_port_set_mac_address(struct net_device *netdev, void *macaddr)
 static const struct net_device_ops edma_port_netdev_ops = {
 	.ndo_open = edma_port_open,
 	.ndo_stop = edma_port_close,
+	.ndo_start_xmit = edma_port_xmit,
 	.ndo_get_stats64 = edma_port_get_stats64,
 	.ndo_set_mac_address = edma_port_set_mac_address,
 	.ndo_validate_addr = eth_validate_addr,
@@ -199,6 +331,7 @@ void edma_port_destroy(struct ppe_port *port)
 	int port_id = port->port_id;
 	struct net_device *netdev = edma_ctx->netdev_arr[port_id - 1];
 
+	edma_port_deconfigure(netdev);
 	edma_port_stats_free(netdev);
 	unregister_netdev(netdev);
 	free_netdev(netdev);
@@ -276,6 +409,8 @@ int edma_port_setup(struct ppe_port *port)
 	 */
 	edma_ctx->netdev_arr[port_id - 1] = netdev;
 
+	edma_port_configure(netdev);
+
 	/* Setup phylink. */
 	ret = ppe_port_phylink_setup(port, netdev);
 	if (ret) {
@@ -298,6 +433,7 @@ int edma_port_setup(struct ppe_port *port)
 register_netdev_fail:
 	ppe_port_phylink_destroy(port);
 port_phylink_setup_fail:
+	edma_port_deconfigure(netdev);
 	edma_ctx->netdev_arr[port_id - 1] = NULL;
 	edma_port_stats_free(netdev);
 stats_alloc_fail:
