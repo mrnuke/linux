@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: (GPL-2.0+)
+/dts-v1/;
+
+#include "ipq9574.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "TP-Link Archer BE550 v1";
+	compatible = "tplink,archer-be550-v1", "qcom,ipq9574";
+
+	aliases {
+		serial0 = &blsp1_uart2;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&mdio {
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+	phy-reset-gpio = <&tlmm 60 GPIO_ACTIVE_HIGH>;
+	status = "okay";
+
+	ethernet-phy-package@0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0>;
+
+		qcom,package-mode = "qusgmii";
+
+		qca8084_0: ethernet-phy@0 {
+			reg = <1>;
+		};
+		qca8084_1: ethernet-phy@1 {
+			reg = <2>;
+		};
+		qca8084_2: ethernet-phy@2 {
+			reg = <3>;
+		};
+		qca8084_3: ethernet-phy@3 {
+			reg = <4>;
+		};
+	};
+
+	qca8081_12: ethernet-phy@12 {
+		reset-gpios = <&tlmm 36 GPIO_ACTIVE_LOW>;
+		reg = <12>;
+	};
+};
+
+&tlmm {
+	pcie2_pins: pcie2-pins {
+		perst-n-pin {
+			pins = "gpio29";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-disable;
+			output-low;
+		};
+	};
+
+	qspi_nand_pins: qspi_nand_pins {
+		qspi_clock {
+			pins = "gpio5";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		qspi_cs {
+			pins = "gpio4";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		qspi_data {
+			pins = "gpio0", "gpio1", "gpio2", "gpio3";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+};
+
+&qpic_bam {
+	status = "okay";
+};
+
+&qpic_nand {
+	pinctrl-0 = <&qspi_nand_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	nand@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		nand-ecc-engine = <&qpic_nand>;
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+
+		partitions {
+			compatible = "qcom,smem-part";
+		};
+	};
+};
+
+&rpm_requests {
+	regulators {
+		compatible = "qcom,rpm-mp5496-regulators";
+
+		ipq9574_s1: s1 {
+			regulator-min-microvolt = <725000>;
+			regulator-max-microvolt = <1075000>;
+		};
+	};
+};
+
+&pcie2_phy {
+	status = "okay";
+};
+
+&pcie2 {
+	pinctrl-0 = <&pcie2_pins>;
+	pinctrl-names = "default";
+	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&blsp1_uart2 {
+	pinctrl-0 = <&uart2_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&usb_0_qusbphy {
+	status = "okay";
+};
+
+&usb_0_qmpphy{
+	status = "okay";
+};
+
+&usb3 {
+	status = "okay";
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+/*
+ * The clock tree follows:
+ *     xo_clk ->  ref_48mhz_clk -> xo_board_clk
+ *
+ * I have no ides what the original oscillator frequency is, but however we
+ * xo_clk and the multipliers, ref_48mhz_clk shoudl be 48 MHz.
+ */
+&xo_clk {
+	// clock-frequency = <48000000>;
+	clock-frequency = <24000000>;
+};
+
+&ref_48mhz_clk {
+	clock-div = <1>;
+	clock-mult = <2>;
+};
+
+&xo_board_clk {
+	clock-div = <2>;
+	clock-mult = <1>;
+};
