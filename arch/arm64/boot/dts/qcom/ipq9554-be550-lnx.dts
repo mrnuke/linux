@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: (GPL-2.0+)
+/dts-v1/;
+
+#include "ipq9574.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "TP_Link BE550";
+	compatible = "tplink,be550", "qcom,ipq9574";
+
+	aliases {
+		serial0 = &blsp1_uart2;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&tlmm {
+	qspi_nand_pins: qspi_nand_pins {
+		qspi_clock {
+			pins = "gpio5";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		qspi_cs {
+			pins = "gpio4";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		qspi_data {
+			pins = "gpio0", "gpio1", "gpio2", "gpio3";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+};
+
+&rpm_requests {
+	regulators {
+		compatible = "qcom,rpm-mp5496-regulators";
+
+		ipq9574_s1: s1 {
+			regulator-min-microvolt = <725000>;
+			regulator-max-microvolt = <1075000>;
+		};
+	};
+};
+
+&pcie2_phy {
+	status = "okay";
+};
+
+&pcie2 {
+	status = "okay";
+	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
+};
+
+&pcie3_phy {
+	status = "okay";
+};
+
+&pcie3 {
+	status = "okay";
+	#perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
+};
+
+&blsp1_uart2 {
+        pinctrl-0 = <&uart2_pins>;
+        pinctrl-names = "default";
+        status = "okay";
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&xo_board_clk {
+	clock-frequency = <24000000>;
+};
