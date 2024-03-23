@@ -18,7 +18,55 @@
 	};
 };
 
+&mdio {
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+	phy-reset-gpio = <&tlmm 60 GPIO_ACTIVE_HIGH>,
+			 <&tlmm 36 GPIO_ACTIVE_HIGH>;
+	status = "okay";
+
+	ethernet-phy-package@0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0>;
+
+		qcom,package-mode = "qusgmii";
+
+		qca8084_0: ethernet-phy@0 {
+			reg = <1>;
+		};
+		qca8084_1: ethernet-phy@1 {
+			reg = <2>;
+		};
+		qca8084_2: ethernet-phy@2 {
+			reg = <3>;
+		};
+		qca8084_3: ethernet-phy@3 {
+			reg = <4>;
+		};
+	};
+
+	qca8081_12: ethernet-phy@12 {
+		reg = <12>;
+	};
+};
+
 &tlmm {
+	mdio_pins: mdio_pinmux {
+		mux_0 {
+			pins = "gpio38";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-disable;
+		};
+		mux_1 {
+			pins = "gpio39";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
 	qspi_nand_pins: qspi_nand_pins {
 		qspi_clock {
 			pins = "gpio5";
