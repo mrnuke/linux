@@ -2,6 +2,7 @@
 /dts-v1/;
 
 #include "ipq9574.dtsi"
+#include "ipq9574-ess.dtsi"
 
 #include <dt-bindings/gpio/gpio.h>
 
@@ -122,6 +123,75 @@
 		ipq9574_s1: s1 {
 			regulator-min-microvolt = <725000>;
 			regulator-max-microvolt = <1075000>;
+		};
+	};
+};
+
+&dp1 {
+	phy-handle = <&qca8084_0>;
+	status = "okay";
+	phy-mode = "usxgmii";
+};
+
+&dp2 {
+	phy-handle = <&qca8084_1>;
+	status = "okay";
+	phy-mode = "usxgmii";
+};
+
+&dp3 {
+	phy-handle = <&qca8084_2>;
+	status = "okay";
+	phy-mode = "usxgmii";
+};
+
+&dp4 {
+	phy-handle = <&qca8084_3>;
+	status = "okay";
+	phy-mode = "usxgmii";
+};
+
+&dp5 {
+	phy-handle = <&qca8081_12>;
+	phy-mode = "usxgmii";
+	status = "okay";
+};
+
+&edma {
+	status = "okay";
+};
+
+&switch {
+	switch_cpu_bmp = <0x1>;
+	switch_lan_bmp = <0x1e>;
+	switch_wan_bmp = <0x40>;
+	switch_mac_mode = <0x15>;
+	switch_mac_mode1 = <0xFF>;
+	switch_mac_mode2 = <0xF>;
+	bm_tick_mode = <0>;
+	tm_tick_mode = <1>;
+
+	qcom,port_phyinfo {
+		port@0 {
+			port_id = <1>;
+			phy_address = <1>;
+		};
+		port@1 {
+			port_id = <2>;
+			phy_address = <2>;
+		};
+		port@2 {
+			port_id = <3>;
+			phy_address = <3>;
+		};
+		port@3 {
+			port_id = <4>;
+			phy_address = <4>;
+		};
+		port@4 {
+			port_id = <6>;
+			phy_address = <12>;
+			port_mac_sel = "QGMAC_PORT";
 		};
 	};
 };
