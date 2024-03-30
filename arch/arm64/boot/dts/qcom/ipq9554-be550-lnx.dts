@@ -121,26 +121,30 @@
 &dp1 {
 	phy-handle = <&qca8084_0>;
 	status = "okay";
+	phy-mode = "usxgmii";
 };
 
 &dp2 {
 	phy-handle = <&qca8084_1>;
 	status = "okay";
+	phy-mode = "usxgmii";
 };
 
 &dp3 {
 	phy-handle = <&qca8084_2>;
 	status = "okay";
+	phy-mode = "usxgmii";
 };
 
 &dp4 {
 	phy-handle = <&qca8084_3>;
 	status = "okay";
+	phy-mode = "usxgmii";
 };
 
 &dp5 {
 	phy-handle = <&qca8081_12>;
-	phy-mode = "psgmii";
+	phy-mode = "usxgmii";
 	status = "okay";
 };
 
