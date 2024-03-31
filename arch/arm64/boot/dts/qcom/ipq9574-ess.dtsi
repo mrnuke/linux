@@ -613,7 +613,7 @@
 		qcom,id = <1>;
 		qcom,mactype = <1>;
 		local-mac-address = [000000000000];
-		phy-mode = "sgmii";
+		phy-mode = "psgmii";
 		status = "disabled";
 	};
 
@@ -623,7 +623,7 @@
 		qcom,id = <2>;
 		qcom,mactype = <1>;
 		local-mac-address = [000000000000];
-		phy-mode = "sgmii";
+		phy-mode = "psgmii";
 		status = "disabled";
 	};
 
@@ -633,7 +633,7 @@
 		qcom,id = <3>;
 		qcom,mactype = <1>;
 		local-mac-address = [000000000000];
-		phy-mode = "sgmii";
+		phy-mode = "psgmii";
 		status = "disabled";
 	};
 
@@ -643,7 +643,7 @@
 		qcom,id = <4>;
 		qcom,mactype = <1>;
 		local-mac-address = [000000000000];
-		phy-mode = "sgmii";
+		phy-mode = "psgmii";
 		status = "disabled";
 	};
 
