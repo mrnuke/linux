@@ -187,6 +187,15 @@
 	};
 };
 
+&pcie_qmp2 {
+	status = "okay";
+};
+
+&pcie2 {
+	status = "okay";
+	perst-gpio = <&tlmm 29 GPIO_ACTIVE_LOW>;
+};
+
 &blsp1_uart2 {
         pinctrl-0 = <&uart2_pins>;
         pinctrl-names = "default";
