@@ -26,6 +26,7 @@
 #define PCS_MODE_SEL_MASK		GENMASK(12, 8)
 #define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
 #define PCS_MODE_QSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x1)
+#define PCS_MODE_2500BASEX		FIELD_PREP(PCS_MODE_SEL_MASK, 0x8)
 #define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
 
 #define PCS_MII_CTRL(x)			(0x480 + 0x18 * (x))
@@ -152,6 +153,28 @@ static void ipq_pcs_get_state_sgmii(struct ipq_pcs *qpcs,
 		state->duplex = DUPLEX_HALF;
 }
 
+static void ipq_pcs_get_state_2500basex(struct ipq_pcs *qpcs,
+					struct phylink_link_state *state)
+{
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(qpcs->regmap, PCS_MII_STS(0), &val);
+	if (ret) {
+		state->link = 0;
+		return;
+	}
+
+	state->link = !!(val & PCS_MII_LINK_STS);
+
+	if (!state->link)
+		return;
+
+	state->speed = SPEED_2500;
+	state->duplex = DUPLEX_FULL;
+	state->pause |= MLO_PAUSE_TXRX_MASK;
+}
+
 static void ipq_pcs_get_state_usxgmii(struct ipq_pcs *qpcs,
 				      struct phylink_link_state *state)
 {
@@ -210,6 +233,10 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		break;
 	case PHY_INTERFACE_MODE_QSGMII:
 		val = PCS_MODE_QSGMII;
+		break;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		val = PCS_MODE_2500BASEX;
+		rate = 312500000;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
 		val = PCS_MODE_XPCS;
@@ -286,6 +313,15 @@ static int ipq_pcs_config_sgmii(struct ipq_pcs *qpcs,
 				       PCS_MII_CTRL(index), PCS_MII_FORCE_MODE);
 }
 
+static int ipq_pcs_config_2500basex(struct ipq_pcs *qpcs)
+{
+	/* Configure PCS for 2500BASEX mode if required */
+	if (qpcs->interface == PHY_INTERFACE_MODE_2500BASEX)
+		return 0;
+
+	return ipq_pcs_config_mode(qpcs, PHY_INTERFACE_MODE_2500BASEX);
+}
+
 static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs)
 {
 	int ret;
@@ -351,6 +387,22 @@ static int ipq_pcs_link_up_config_sgmii(struct ipq_pcs *qpcs,
 			       PCS_MII_CTRL(index), PCS_MII_ADPT_RESET);
 }
 
+static int ipq_pcs_link_up_config_2500basex(struct ipq_pcs *qpcs, int speed)
+{
+	int ret;
+
+	/* 2500BASEX does not support autoneg and does not need to
+	 * configure PCS speed. Only reset PCS adapter here.
+	 */
+	ret = regmap_clear_bits(qpcs->regmap,
+				PCS_MII_CTRL(0), PCS_MII_ADPT_RESET);
+	if (ret)
+		return ret;
+
+	return regmap_set_bits(qpcs->regmap,
+			       PCS_MII_CTRL(0), PCS_MII_ADPT_RESET);
+}
+
 static int ipq_pcs_link_up_config_usxgmii(struct ipq_pcs *qpcs, int speed)
 {
 	unsigned int val;
@@ -397,6 +449,10 @@ static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+		return 0;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		/* In-band autoneg is not supported for 2500BASEX */
+		phylink_clear(supported, Autoneg);
 		return 0;
 	case PHY_INTERFACE_MODE_USXGMII:
 		/* USXGMII only supports full duplex mode */
@@ -454,6 +510,9 @@ static void ipq_pcs_get_state(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_QSGMII:
 		ipq_pcs_get_state_sgmii(qpcs, index, state);
 		break;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		ipq_pcs_get_state_2500basex(qpcs, state);
+		break;
 	case PHY_INTERFACE_MODE_USXGMII:
 		ipq_pcs_get_state_usxgmii(qpcs, state);
 		break;
@@ -483,6 +542,8 @@ static int ipq_pcs_config(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 		return ipq_pcs_config_sgmii(qpcs, index, neg_mode, interface);
+	case PHY_INTERFACE_MODE_2500BASEX:
+		return ipq_pcs_config_2500basex(qpcs);
 	case PHY_INTERFACE_MODE_USXGMII:
 		return ipq_pcs_config_usxgmii(qpcs);
 	default:
@@ -505,6 +566,9 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_QSGMII:
 		ret = ipq_pcs_link_up_config_sgmii(qpcs, index,
 						   neg_mode, speed);
+		break;
+	case PHY_INTERFACE_MODE_2500BASEX:
+		ret = ipq_pcs_link_up_config_2500basex(qpcs, speed);
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
 		ret = ipq_pcs_link_up_config_usxgmii(qpcs, speed);
@@ -587,6 +651,7 @@ static int ipq_pcs_create_miis(struct ipq_pcs *qpcs)
 static unsigned long ipq_pcs_clk_rate_get(struct ipq_pcs *qpcs)
 {
 	switch (qpcs->interface) {
+	case PHY_INTERFACE_MODE_2500BASEX:
 	case PHY_INTERFACE_MODE_USXGMII:
 		return 312500000;
 	default:
