@@ -28,6 +28,9 @@
 #define PCS_MODE_QSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x1)
 #define PCS_MODE_2500BASEX		FIELD_PREP(PCS_MODE_SEL_MASK, 0x8)
 #define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
+#define PCS_MODE_SGMII_MODE_MASK	GENMASK(6, 4)
+#define PCS_MODE_SGMII_MODE_1000BASEX	FIELD_PREP(PCS_MODE_SGMII_MODE_MASK, \
+						   0x0)
 
 #define PCS_MII_CTRL(x)			(0x480 + 0x18 * (x))
 #define PCS_MII_ADPT_RESET		BIT(11)
@@ -249,16 +252,21 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 			       phy_interface_t interface)
 {
 	unsigned long rate = 125000000;
-	unsigned int val;
+	unsigned int val, mask;
 	int ret;
 
 	/* Configure PCS interface mode */
+	mask = PCS_MODE_SEL_MASK;
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 		val = PCS_MODE_SGMII;
 		break;
 	case PHY_INTERFACE_MODE_QSGMII:
 		val = PCS_MODE_QSGMII;
+		break;
+	case PHY_INTERFACE_MODE_1000BASEX:
+		mask |= PCS_MODE_SGMII_MODE_MASK;
+		val = PCS_MODE_SGMII | PCS_MODE_SGMII_MODE_1000BASEX;
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		val = PCS_MODE_2500BASEX;
@@ -273,8 +281,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		return -EOPNOTSUPP;
 	}
 
-	ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL,
-				 PCS_MODE_SEL_MASK, val);
+	ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL, mask, val);
 	if (ret)
 		return ret;
 
@@ -487,6 +494,7 @@ static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 	case PHY_INTERFACE_MODE_10GBASER:
 		return 0;
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -509,6 +517,7 @@ static unsigned int ipq_pcs_inband_caps(struct phylink_pcs *pcs,
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 	case PHY_INTERFACE_MODE_USXGMII:
 		return LINK_INBAND_DISABLE | LINK_INBAND_ENABLE;
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -563,6 +572,10 @@ static void ipq_pcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+		/* SGMII and 1000BASEX in-band autoneg word format are decoded
+		 * by PCS hardware and both placed to the same status register.
+		 */
 		ipq_pcs_get_state_sgmii(qpcs, index, state);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -599,6 +612,7 @@ static int ipq_pcs_config(struct phylink_pcs *pcs,
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		return ipq_pcs_config_sgmii(qpcs, index, neg_mode, interface);
 	case PHY_INTERFACE_MODE_2500BASEX:
 		return ipq_pcs_config_2500basex(qpcs);
@@ -624,6 +638,7 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		ret = ipq_pcs_link_up_config_sgmii(qpcs, index,
 						   neg_mode, speed);
 		break;
