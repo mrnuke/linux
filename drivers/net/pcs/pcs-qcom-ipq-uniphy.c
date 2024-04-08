@@ -27,6 +27,9 @@
 #define PCS_MODE_PSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x2)
 #define PCS_MODE_SGMII_PLUS		FIELD_PREP(PCS_MODE_SEL_MASK, 0x8)
 #define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
+#define PCS_MODE_SGMII_CTRL_MASK	GENMASK(6, 4)
+#define PCS_MODE_SGMII_CTRL_1000BASEX	FIELD_PREP(PCS_MODE_SGMII_CTRL_MASK, \
+						   0x0)
 #define PCS_MODE_AN_MODE		BIT(0)
 
 #define PCS_CHANNEL_CTRL(x)		(0x480 + 0x18 * (x))
@@ -392,6 +395,13 @@ static int ipq_unipcs_config_mode(struct ipq_uniphy_pcs *qunipcs,
 					PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
 					PCS_MODE_PSGMII);
 		break;
+	case PHY_INTERFACE_MODE_1000BASEX:
+		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+					PCS_MODE_SEL_MASK |
+					PCS_MODE_SGMII_CTRL_MASK,
+					PCS_MODE_SGMII |
+					PCS_MODE_SGMII_CTRL_1000BASEX);
+		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		rate = 312500000;
 		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
@@ -620,6 +630,7 @@ ipq_unipcs_link_up_clock_rate_set(struct ipq_uniphy_pcs_ch *qunipcs_ch,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_PSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		rate = ipq_unipcs_clock_rate_get_gmii(speed);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -765,6 +776,10 @@ static void ipq_unipcs_get_state(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_PSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+		/* SGMII and 1000BASEX in-band autoneg word format are decoded
+		 * by PCS hardware and both placed to the same status register.
+		 */
 		ipq_unipcs_get_state_sgmii(qunipcs, channel, state);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -802,6 +817,7 @@ static int ipq_unipcs_config(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_PSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		return ipq_unipcs_config_sgmii(qunipcs, channel,
 					       neg_mode, interface);
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -816,6 +832,11 @@ static int ipq_unipcs_config(struct phylink_pcs *pcs,
 			"interface %s not supported\n", phy_modes(interface));
 		return -EOPNOTSUPP;
 	};
+}
+
+static void qcom_ipq_unipcs_an_restart(struct phylink_pcs *pcs)
+{
+	/* Currently not used */
 }
 
 static void ipq_unipcs_link_up(struct phylink_pcs *pcs,
@@ -835,6 +856,7 @@ static void ipq_unipcs_link_up(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_PSGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		ipq_unipcs_link_up_config_sgmii(qunipcs, channel,
 						neg_mode, speed);
 		break;
@@ -858,6 +880,7 @@ static const struct phylink_pcs_ops ipq_unipcs_phylink_ops = {
 	.pcs_validate = ipq_unipcs_validate,
 	.pcs_get_state = ipq_unipcs_get_state,
 	.pcs_config = ipq_unipcs_config,
+	.pcs_an_restart = qcom_ipq_unipcs_an_restart,
 	.pcs_link_up = ipq_unipcs_link_up,
 };
 
