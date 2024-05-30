@@ -380,6 +380,7 @@ int edma_port_setup(struct ppe_port *port)
 	netdev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 	netdev->netdev_ops = &edma_port_netdev_ops;
 	netdev->gso_max_segs = GSO_MAX_SEGS;
+	edma_set_ethtool_ops(netdev);
 
 	maddr = mac_addr;
 	if (of_get_mac_address(np, maddr))

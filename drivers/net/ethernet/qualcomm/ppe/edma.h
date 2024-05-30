@@ -161,6 +161,7 @@ void edma_destroy(struct ppe_device *ppe_dev);
 int edma_setup(struct ppe_device *ppe_dev);
 void edma_debugfs_teardown(void);
 int edma_debugfs_setup(struct ppe_device *ppe_dev);
+void edma_set_ethtool_ops(struct net_device *netdev);
 int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
 				 enum ppe_queue_class_type class,
 				 int index, int queue_offset);
