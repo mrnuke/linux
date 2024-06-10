@@ -5,6 +5,15 @@
 #ifndef __EDMA_CFG_RX__
 #define __EDMA_CFG_RX__
 
+/* Rx default NAPI budget */
+#define EDMA_RX_NAPI_WORK_DEF		128
+
+/* RX minimum NAPI budget */
+#define EDMA_RX_NAPI_WORK_MIN		16
+
+/* Rx maximum NAPI budget */
+#define EDMA_RX_NAPI_WORK_MAX		512
+
 /* SKB payload size used in page mode */
 #define EDMA_RX_PAGE_MODE_SKB_SIZE	256
 
@@ -22,8 +31,20 @@
 /* Rx mitigation timer's default value in microseconds */
 #define EDMA_RX_MITIGATION_TIMER_DEF	25
 
+/* Rx mitigation timer's minimum value in microseconds */
+#define EDMA_RX_MITIGATION_TIMER_MIN	0
+
+/* Rx mitigation timer's maximum value in microseconds */
+#define EDMA_RX_MITIGATION_TIMER_MAX	1000
+
 /* Rx mitigation packet count's default value */
 #define EDMA_RX_MITIGATION_PKT_CNT_DEF	16
+
+/* Rx mitigation packet count's minimum value */
+#define EDMA_RX_MITIGATION_PKT_CNT_MIN	0
+
+/* Rx mitigation packet count's maximum value */
+#define EDMA_RX_MITIGATION_PKT_CNT_MAX	256
 
 /* Default bitmap of cores for RPS to ARM cores */
 #define EDMA_RX_DEFAULT_BITMAP	((1 << EDMA_MAX_CORE) - 1)
