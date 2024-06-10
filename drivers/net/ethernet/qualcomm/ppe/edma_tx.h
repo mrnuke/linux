@@ -288,6 +288,10 @@ struct edma_txcmpl_ring {
 	bool napi_added;
 };
 
+extern int edma_tx_napi_budget;
+extern int edma_tx_mitigation_timer;
+extern int edma_tx_mitigation_pkt_cnt;
+
 enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 				      struct sk_buff *skb,
 			       struct edma_txdesc_ring *txdesc_ring,
