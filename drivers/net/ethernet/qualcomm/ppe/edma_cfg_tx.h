@@ -5,11 +5,27 @@
 #ifndef __EDMA_CFG_TX__
 #define __EDMA_CFG_TX__
 
+#define EDMA_TX_NAPI_WORK_DEF	512
+#define EDMA_TX_NAPI_WORK_MIN	16
+#define EDMA_TX_NAPI_WORK_MAX	512
+
 /* Tx mitigation timer's default value. */
 #define EDMA_TX_MITIGATION_TIMER_DEF	250
 
+/* Tx mitigation timer's minimum value in microseconds */
+#define EDMA_TX_MITIGATION_TIMER_MIN	0
+
+/* Tx mitigation timer's maximum value in microseconds */
+#define EDMA_TX_MITIGATION_TIMER_MAX	1000
+
 /* Tx mitigation packet count default value. */
 #define EDMA_TX_MITIGATION_PKT_CNT_DEF	16
+
+/* Tx mitigation packet count's minimum value */
+#define EDMA_TX_MITIGATION_PKT_CNT_MIN	0
+
+/* Tx mitigation packet count's maximum value */
+#define EDMA_TX_MITIGATION_PKT_CNT_MAX	256
 
 void edma_cfg_tx_rings(void);
 int edma_cfg_tx_rings_alloc(void);

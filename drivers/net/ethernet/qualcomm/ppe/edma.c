@@ -38,6 +38,38 @@ static int rx_buff_size;
 module_param(rx_buff_size, int, 0640);
 MODULE_PARM_DESC(rx_buff_size, "Rx Buffer size for Jumbo MRU value (default:0)");
 
+int edma_rx_napi_budget = EDMA_RX_NAPI_WORK_DEF;
+module_param(edma_rx_napi_budget, int, 0444);
+MODULE_PARM_DESC(edma_rx_napi_budget, "Rx NAPI budget (default:128, min:16, max:512)");
+
+int edma_tx_napi_budget = EDMA_TX_NAPI_WORK_DEF;
+module_param(edma_tx_napi_budget, int, 0444);
+MODULE_PARM_DESC(edma_tx_napi_budget, "Tx NAPI budget (default:512 for ipq95xx, min:16, max:512)");
+
+int edma_rx_mitigation_pkt_cnt = EDMA_RX_MITIGATION_PKT_CNT_DEF;
+module_param(edma_rx_mitigation_pkt_cnt, int, 0444);
+MODULE_PARM_DESC(edma_rx_mitigation_pkt_cnt,
+		 "Rx mitigation packet count value (default:16, min:0, max: 256)");
+
+s32 edma_rx_mitigation_timer = EDMA_RX_MITIGATION_TIMER_DEF;
+module_param(edma_rx_mitigation_timer, int, 0444);
+MODULE_PARM_DESC(edma_dp_rx_mitigation_timer,
+		 "Rx mitigation timer value in microseconds (default:25, min:0, max: 1000)");
+
+int edma_tx_mitigation_timer = EDMA_TX_MITIGATION_TIMER_DEF;
+module_param(edma_tx_mitigation_timer, int, 0444);
+MODULE_PARM_DESC(edma_tx_mitigation_timer,
+		 "Tx mitigation timer value in microseconds (default:250, min:0, max: 1000)");
+
+int edma_tx_mitigation_pkt_cnt = EDMA_TX_MITIGATION_PKT_CNT_DEF;
+module_param(edma_tx_mitigation_pkt_cnt, int, 0444);
+MODULE_PARM_DESC(edma_tx_mitigation_pkt_cnt,
+		 "Tx mitigation packet count value (default:16, min:0, max: 256)");
+
+static int tx_requeue_stop;
+module_param(tx_requeue_stop, int, 0640);
+MODULE_PARM_DESC(tx_requeue_stop, "Disable Tx requeue function (default:0)");
+
 /* Priority to multi-queue mapping. */
 static u8 edma_pri_map[PPE_QUEUE_INTER_PRI_NUM] = {
 	0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
@@ -828,7 +860,10 @@ int edma_setup(struct ppe_device *ppe_dev)
 	edma_ctx->hw_info = &ipq9574_hw_info;
 	edma_ctx->ppe_dev = ppe_dev;
 	edma_ctx->rx_buf_size = rx_buff_size;
+
 	edma_ctx->tx_requeue_stop = false;
+	if (tx_requeue_stop != 0)
+		edma_ctx->tx_requeue_stop = true;
 
 	/* Configure the EDMA common clocks. */
 	ret = edma_clock_init();
