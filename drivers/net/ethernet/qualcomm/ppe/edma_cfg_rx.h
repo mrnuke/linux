@@ -49,6 +49,8 @@
 /* Default bitmap of cores for RPS to ARM cores */
 #define EDMA_RX_DEFAULT_BITMAP	((1 << EDMA_MAX_CORE) - 1)
 
+extern u32 edma_cfg_rx_rps_bitmap_cores;
+
 int edma_cfg_rx_rings(void);
 int edma_cfg_rx_rings_alloc(void);
 void edma_cfg_rx_ring_mappings(void);
@@ -66,4 +68,6 @@ void edma_cfg_rx_buff_size_setup(void);
 int edma_cfg_rx_rps_hash_map(void);
 int edma_cfg_rx_rps(struct ctl_table *table, int write,
 		    void *buffer, size_t *lenp, loff_t *ppos);
+int edma_cfg_rx_rps_bitmap(struct ctl_table *table, int write,
+			   void *buffer, size_t *lenp, loff_t *ppos);
 #endif
