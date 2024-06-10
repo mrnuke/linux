@@ -170,6 +170,24 @@ static void edma_cfg_txcmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_CTRL(txcmpl_ring->id);
 	regmap_write(regmap, reg, EDMA_TXCMPL_RETMODE_OPAQUE);
 
+	/* Validate mitigation timer value */
+	if (edma_tx_mitigation_timer < EDMA_TX_MITIGATION_TIMER_MIN ||
+	    edma_tx_mitigation_timer > EDMA_TX_MITIGATION_TIMER_MAX) {
+		pr_err("Invalid Tx mitigation timer configured:%d for ring:%d. Using the default timer value:%d\n",
+		       edma_tx_mitigation_timer, txcmpl_ring->id,
+		       EDMA_TX_MITIGATION_TIMER_DEF);
+		edma_tx_mitigation_timer = EDMA_TX_MITIGATION_TIMER_DEF;
+	}
+
+	/* Validate mitigation packet count value */
+	if (edma_tx_mitigation_pkt_cnt < EDMA_TX_MITIGATION_PKT_CNT_MIN ||
+	    edma_tx_mitigation_pkt_cnt > EDMA_TX_MITIGATION_PKT_CNT_MAX) {
+		pr_err("Invalid Tx mitigation packet count configured:%d for ring:%d. Using the default packet counter value:%d\n",
+		       edma_tx_mitigation_timer, txcmpl_ring->id,
+		       EDMA_TX_MITIGATION_PKT_CNT_DEF);
+		edma_tx_mitigation_pkt_cnt = EDMA_TX_MITIGATION_PKT_CNT_DEF;
+	}
+
 	/* Configure the Mitigation timer. */
 	data = EDMA_MICROSEC_TO_TIMER_UNIT(EDMA_TX_MITIGATION_TIMER_DEF,
 					   ppe_dev->clk_rate / MHZ);
@@ -180,7 +198,7 @@ static void edma_cfg_txcmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 	regmap_write(regmap, reg, data);
 
 	/* Configure the Mitigation packet count. */
-	data = (EDMA_TX_MITIGATION_PKT_CNT_DEF & EDMA_TXCMPL_LOW_THRE_MASK)
+	data = (edma_tx_mitigation_pkt_cnt & EDMA_TXCMPL_LOW_THRE_MASK)
 		<< EDMA_TXCMPL_LOW_THRE_SHIFT;
 	pr_debug("EDMA Tx mitigation packet count value: %d\n", data);
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_UGT_THRE(txcmpl_ring->id);
@@ -634,6 +652,13 @@ void edma_cfg_tx_napi_add(struct net_device *netdev, u32 port_id)
 	struct edma_txcmpl_ring *txcmpl_ring;
 	u32 i, ring_idx;
 
+	if (edma_tx_napi_budget < EDMA_TX_NAPI_WORK_MIN ||
+	    edma_tx_napi_budget > EDMA_TX_NAPI_WORK_MAX) {
+		pr_err("Incorrect Tx NAPI budget: %d, setting to default: %d",
+		       edma_tx_napi_budget, hw_info->napi_budget_tx);
+		edma_tx_napi_budget = hw_info->napi_budget_tx;
+	}
+
 	/* Adding tx napi for a interface with each queue. */
 	for_each_possible_cpu(i) {
 		ring_idx = ((port_id - 1) * num_possible_cpus()) + i;
@@ -644,5 +669,5 @@ void edma_cfg_tx_napi_add(struct net_device *netdev, u32 port_id)
 		netdev_dbg(netdev, "Napi added for txcmpl ring: %u\n", txcmpl_ring->id);
 	}
 
-	netdev_dbg(netdev, "Tx NAPI budget: %d\n", hw_info->napi_budget_tx);
+	netdev_dbg(netdev, "Tx NAPI budget: %d\n", edma_tx_napi_budget);
 }
