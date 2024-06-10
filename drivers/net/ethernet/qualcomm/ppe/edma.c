@@ -797,6 +797,11 @@ void edma_destroy(struct ppe_device *ppe_dev)
 	struct edma_ring_info *rx = hw_info->rx;
 	u32 i;
 
+	if (edma_ctx->rx_rps_ctl_table_hdr) {
+		unregister_sysctl_table(edma_ctx->rx_rps_ctl_table_hdr);
+		edma_ctx->rx_rps_ctl_table_hdr = NULL;
+	}
+
 	/* Disable interrupts. */
 	for (i = 1; i <= hw_info->max_ports; i++)
 		edma_cfg_tx_disable_interrupts(i);
@@ -840,6 +845,17 @@ void edma_destroy(struct ppe_device *ppe_dev)
 	kfree(edma_ctx->netdev_arr);
 }
 
+/* EDMA Rx RPS core sysctl table */
+static struct ctl_table edma_rx_rps_core_table[] = {
+	{
+		.procname	=	"rps_bitmap_cores",
+		.data		=	&edma_cfg_rx_rps_bitmap_cores,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	edma_cfg_rx_rps_bitmap
+	},
+};
+
 /**
  * edma_setup - EDMA Setup.
  * @ppe_dev: PPE device
@@ -864,6 +880,13 @@ int edma_setup(struct ppe_device *ppe_dev)
 	edma_ctx->tx_requeue_stop = false;
 	if (tx_requeue_stop != 0)
 		edma_ctx->tx_requeue_stop = true;
+
+	edma_ctx->rx_rps_ctl_table_hdr = register_sysctl("net/edma",
+							 edma_rx_rps_core_table);
+	if (!edma_ctx->rx_rps_ctl_table_hdr) {
+		pr_err("Rx rps sysctl table configuration failed\n");
+		return -EINVAL;
+	}
 
 	/* Configure the EDMA common clocks. */
 	ret = edma_clock_init();
