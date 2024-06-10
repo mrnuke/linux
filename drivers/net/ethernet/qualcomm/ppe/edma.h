@@ -122,6 +122,7 @@ struct edma_intr_info {
  * @tx_rings: Tx Descriptor Ring, SW is producer
  * @txcmpl_rings: Tx complete Ring, SW is consumer
  * @err_stats: Per CPU error statistics
+ * @rx_rps_ctl_table_hdr: Rx RPS sysctl table
  * @rx_page_mode: Page mode enabled or disabled
  * @rx_buf_size: Rx buffer size for Jumbo MRU
  * @tx_requeue_stop: Tx requeue stop enabled or disabled
@@ -137,6 +138,7 @@ struct edma_context {
 	struct edma_txdesc_ring *tx_rings;
 	struct edma_txcmpl_ring *txcmpl_rings;
 	struct edma_err_stats __percpu *err_stats;
+	struct ctl_table_header *rx_rps_ctl_table_hdr;
 	u32 rx_page_mode;
 	u32 rx_buf_size;
 	bool tx_requeue_stop;
