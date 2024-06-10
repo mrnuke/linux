@@ -281,6 +281,10 @@ struct edma_rxdesc_ring {
 	struct sk_buff *last;
 };
 
+extern int edma_rx_napi_budget;
+extern int edma_rx_mitigation_timer;
+extern int edma_rx_mitigation_pkt_cnt;
+
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
