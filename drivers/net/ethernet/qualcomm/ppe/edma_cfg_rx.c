@@ -43,6 +43,8 @@ static u32 edma_rx_ring_queue_map[][EDMA_MAX_CORE] = {{ 0, 8, 16, 24 },
 						{ 6, 14, 22, 30 },
 						{ 7, 15, 23, 31 }};
 
+u32 edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
+
 static int edma_cfg_rx_desc_rings_reset_queue_mapping(void)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
@@ -986,4 +988,29 @@ int edma_cfg_rx_rps_hash_map(void)
 	}
 
 	return 0;
+}
+
+/* Configure RPS hash mapping based on bitmap */
+int edma_cfg_rx_rps_bitmap(const struct ctl_table *table, int write,
+			   void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write)
+		return ret;
+
+	if (!edma_cfg_rx_rps_bitmap_cores ||
+	    edma_cfg_rx_rps_bitmap_cores > EDMA_RX_DEFAULT_BITMAP) {
+		pr_warn("Incorrect CPU bitmap: %x. Setting it to default value: %d",
+			edma_cfg_rx_rps_bitmap_cores, EDMA_RX_DEFAULT_BITMAP);
+		edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
+	}
+
+	ret = edma_cfg_rx_rps_hash_map();
+
+	pr_info("EDMA RPS bitmap value: %d\n", edma_cfg_rx_rps_bitmap_cores);
+
+	return ret;
 }
