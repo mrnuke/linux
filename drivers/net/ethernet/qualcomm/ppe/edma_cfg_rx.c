@@ -166,6 +166,24 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_RING_SIZE(rxdesc_ring->ring_id);
 	regmap_write(regmap, reg, data);
 
+	/* Validate mitigation timer value */
+	if (edma_rx_mitigation_timer < EDMA_RX_MITIGATION_TIMER_MIN ||
+	    edma_rx_mitigation_timer > EDMA_RX_MITIGATION_TIMER_MAX) {
+		pr_err("Invalid Rx mitigation timer configured:%d for ring:%d. Using the default timer value:%d\n",
+		       edma_rx_mitigation_timer, rxdesc_ring->ring_id,
+			EDMA_RX_MITIGATION_TIMER_DEF);
+		edma_rx_mitigation_timer = EDMA_RX_MITIGATION_TIMER_DEF;
+	}
+
+	/* Validate mitigation packet count value */
+	if (edma_rx_mitigation_pkt_cnt < EDMA_RX_MITIGATION_PKT_CNT_MIN ||
+	    edma_rx_mitigation_pkt_cnt > EDMA_RX_MITIGATION_PKT_CNT_MAX) {
+		pr_err("Invalid Rx mitigation packet count configured:%d for ring:%d. Using the default packet counter value:%d\n",
+		       edma_rx_mitigation_timer, rxdesc_ring->ring_id,
+			EDMA_RX_MITIGATION_PKT_CNT_DEF);
+		edma_rx_mitigation_pkt_cnt = EDMA_RX_MITIGATION_PKT_CNT_DEF;
+	}
+
 	/* Configure the Mitigation timer */
 	data = EDMA_MICROSEC_TO_TIMER_UNIT(EDMA_RX_MITIGATION_TIMER_DEF,
 					   ppe_dev->clk_rate / MHZ);
@@ -176,7 +194,7 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	regmap_write(regmap, reg, data);
 
 	/* Configure the Mitigation packet count */
-	data = (EDMA_RX_MITIGATION_PKT_CNT_DEF & EDMA_RXDESC_LOW_THRE_MASK)
+	data = (edma_rx_mitigation_pkt_cnt & EDMA_RXDESC_LOW_THRE_MASK)
 			<< EDMA_RXDESC_LOW_THRE_SHIFT;
 	pr_debug("EDMA Rx mitigation packet count value: %d\n", data);
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_UGT_THRE(rxdesc_ring->ring_id);
@@ -915,6 +933,13 @@ void edma_cfg_rx_napi_add(void)
 	struct edma_ring_info *rx = hw_info->rx;
 	u32 i;
 
+	if (edma_rx_napi_budget < EDMA_RX_NAPI_WORK_MIN ||
+	    edma_rx_napi_budget > EDMA_RX_NAPI_WORK_MAX) {
+		pr_err("Incorrect Rx NAPI budget: %d, setting to default: %d",
+		       edma_rx_napi_budget, hw_info->napi_budget_rx);
+		edma_rx_napi_budget = hw_info->napi_budget_rx;
+	}
+
 	for (i = 0; i < rx->num_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring = &edma_ctx->rx_rings[i];
 
@@ -923,7 +948,7 @@ void edma_cfg_rx_napi_add(void)
 		rxdesc_ring->napi_added = true;
 	}
 
-	netdev_dbg(edma_ctx->dummy_dev, "Rx NAPI budget: %d\n", hw_info->napi_budget_rx);
+	netdev_dbg(edma_ctx->dummy_dev, "Rx NAPI budget: %d\n", edma_rx_napi_budget);
 }
 
 /**
