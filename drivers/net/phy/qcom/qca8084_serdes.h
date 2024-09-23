@@ -15,4 +15,6 @@ struct mdio_device *qca8084_package_pcs_probe(struct device_node *pcs_np);
 struct mdio_device *qca8084_package_xpcs_probe(struct device_node *xpcs_np);
 void qca8084_package_xpcs_and_pcs_remove(struct mdio_device *xpcs_mdiodev,
 					 struct mdio_device *pcs_mdiodev);
+int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
+			    struct mdio_device *pcs_mdiodev);
 #endif /* _QCA8084_SERDES_H_ */
