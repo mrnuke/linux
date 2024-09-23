@@ -8,6 +8,7 @@
 #include <dt-bindings/net/qcom,qca808x.h>
 
 #include "../phylib.h"
+#include "qca8084_serdes.h"
 #include "qcom.h"
 
 /* ADC threshold */
@@ -172,11 +173,13 @@ enum {
 
 struct qca808x_priv {
 	int led_polarity_mode;
+	int channel_id;
 };
 
 struct qca808x_shared_priv {
 	int package_mode;
 	struct clk *clk[PACKAGE_CLK_MAX];
+	struct mdio_device *mdiodev[2];	/* PCS and XPCS mdio device */
 };
 
 static const char *const qca8084_package_clk_name[PACKAGE_CLK_MAX] = {
@@ -354,6 +357,8 @@ static int qca808x_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct qca808x_priv *priv;
+	u32 ch_id = 0;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -362,6 +367,14 @@ static int qca808x_probe(struct phy_device *phydev)
 	/* Init LED polarity mode to -1 */
 	priv->led_polarity_mode = -1;
 
+	/* DT property qcom,xpcs-channel" is optional and only available for
+	 * 10G-QXGMII mode.
+	 */
+	ret = of_property_read_u32(dev->of_node, "qcom,xpcs-channel", &ch_id);
+	if (ret && ret != -EINVAL)
+		return ret;
+
+	priv->channel_id = ch_id;
 	phydev->priv = priv;
 
 	return 0;
@@ -1014,6 +1027,7 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	int addr[QCA8084_MDIO_DEVICE_NUM] = {0, 1, 2, 3, 4, 5, 6};
 	struct device_node *np = phy_package_get_node(phydev);
 	struct reset_control *rstc;
+	struct device_node *child;
 	int i, ret, clear, set;
 	struct clk *clk;
 
@@ -1072,6 +1086,26 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	if (ret && ret != -EINVAL)
 		return ret;
 
+	for_each_available_child_of_node(np, child) {
+		struct mdio_device *mdiodev;
+
+		if (of_node_name_eq(child, "pcs-phy")) {
+			mdiodev = qca8084_package_pcs_probe(child);
+			if (IS_ERR(mdiodev))
+				return PTR_ERR(mdiodev);
+
+			shared_priv->mdiodev[0] = mdiodev;
+		}
+
+		if (of_node_name_eq(child, "xpcs-phy")) {
+			mdiodev = qca8084_package_xpcs_probe(child);
+			if (IS_ERR(mdiodev))
+				return PTR_ERR(mdiodev);
+
+			shared_priv->mdiodev[1] = mdiodev;
+		}
+	}
+
 	rstc = of_reset_control_get_exclusive(np, NULL);
 	if (IS_ERR(rstc))
 		return dev_err_probe(&phydev->mdio.dev, PTR_ERR(rstc),
@@ -1079,6 +1113,14 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 
 	/* Deassert PHY package. */
 	return reset_control_deassert(rstc);
+}
+
+static void qca8084_phy_package_remove_once(struct phy_device *phydev)
+{
+	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);
+
+	qca8084_package_xpcs_and_pcs_remove(shared_priv->mdiodev[1],
+					    shared_priv->mdiodev[0]);
 }
 
 static int qca8084_probe(struct phy_device *phydev)
@@ -1099,6 +1141,10 @@ static int qca8084_probe(struct phy_device *phydev)
 			return ret;
 	}
 
+	ret = qca808x_probe(phydev);
+	if (ret)
+		return ret;
+
 	/* Enable clock of PHY device, so that the PHY register
 	 * can be accessed to get PHY features.
 	 */
@@ -1114,6 +1160,12 @@ static int qca8084_probe(struct phy_device *phydev)
 				     "Get PHY reset failed\n");
 
 	return reset_control_deassert(rstc);
+}
+
+static void qca8084_remove(struct phy_device *phydev)
+{
+	if (phy_package_remove_once(phydev))
+		qca8084_phy_package_remove_once(phydev);
 }
 
 static struct phy_driver qca808x_driver[] = {
@@ -1167,6 +1219,7 @@ static struct phy_driver qca808x_driver[] = {
 	.config_init		= qca8084_config_init,
 	.link_change_notify	= qca8084_link_change_notify,
 	.probe			= qca8084_probe,
+	.remove			= qca8084_remove,
 }, };
 
 module_phy_driver(qca808x_driver);
