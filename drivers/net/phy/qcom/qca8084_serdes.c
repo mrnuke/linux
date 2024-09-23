@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <linux/dev_printk.h>
 #include <linux/mdio.h>
 #include <linux/of.h>
@@ -54,6 +55,13 @@
 
 #define BYPASS_TUNNING_IPG			0x189
 #define BYPASS_TUNNING_IPG_MASK			GENMASK(11, 0)
+
+#define QP_USXG_RESET				0x18c
+#define QP_USXG_SGMII_FUNC_RESET		BIT(4)
+#define QP_USXG_P3_FUNC_RESET			BIT(3)
+#define QP_USXG_P2_FUNC_RESET			BIT(2)
+#define QP_USXG_P1_FUNC_RESET			BIT(1)
+#define QP_USXG_P0_FUNC_RESET			BIT(0)
 
 /* MDIO_MMD_PCS register */
 #define PCS_CONTROL2				0x7
@@ -106,6 +114,9 @@
 #define MII_BIT_CONTROL				BIT(8)
 #define TX_CONFIG				BIT(3)
 #define AUTO_NEGOTIATION_CMPLT_INTR		BIT(0)
+
+#define PCS_ERR_SEL				0x8002
+#define PCS_AN_COMPLETE				BIT(0)
 
 #define XAUI_CONTROL				0x8004
 #define TX_IPG_CHECK_DISABLE			BIT(0)
@@ -620,4 +631,162 @@ int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
 		return ret;
 
 	return qca8084_xpcs_set_mode(xpcs_mdiodev);
+}
+
+static int qca8084_pcs_ipg_tune_reset(struct mdio_device *mdio_dev,
+				      int reset_function)
+{
+	int ret;
+
+	ret = mdiodev_c45_modify(mdio_dev, MDIO_MMD_PMAPMD, QP_USXG_RESET,
+				 reset_function, 0);
+	if (ret)
+		return ret;
+
+	usleep_range(1000, 1100);
+
+	return mdiodev_c45_modify(mdio_dev, MDIO_MMD_PMAPMD, QP_USXG_RESET,
+				  reset_function, reset_function);
+}
+
+static int qca8084_xpcs_an_restart(struct mdio_device *xpcs_mdiodev,
+				   int channel)
+{
+	int ret, val, mmd;
+
+	mmd = qca8084_xpcs_ch_mmd[channel];
+
+	/* Restart auto-negotiation */
+	ret = mdiodev_c45_modify(xpcs_mdiodev, mmd, MII_CONTROL,
+				 AUTO_NEGOTIATION_RESTART,
+				 AUTO_NEGOTIATION_RESTART);
+	if (ret)
+		return ret;
+
+	/* Wait auto-negotiation complete */
+	ret = read_poll_timeout(mdiodev_c45_read, val,
+				(val & PCS_AN_COMPLETE), 1000, 100000, true,
+				xpcs_mdiodev, mmd, PCS_ERR_SEL);
+	if (ret) {
+		dev_err(&xpcs_mdiodev->dev,
+			"XPCS auto negotiation timeout on channel %d\n",
+			channel);
+
+		return ret;
+	}
+
+	/* Clear pcs auto-negotiation complete interrupt */
+	return mdiodev_c45_modify(xpcs_mdiodev, mmd, PCS_ERR_SEL,
+				  PCS_AN_COMPLETE, 0);
+}
+
+void qca8084_qxgmii_set_speed(struct mdio_device *xpcs_mdiodev,
+			      struct mdio_device *pcs_mdiodev,
+			      int channel, int speed)
+{
+	struct qca8084_xpcs_data *xpcs_data = mdiodev_get_drvdata(xpcs_mdiodev);
+	struct qca8084_xpcs_channel_priv *xpcs_ch;
+	int mmd, i, ret, xpcs_rate;
+	unsigned long rate;
+
+	for (i = 0; i < QCA8084_CHANNEL_MAX; i++) {
+		xpcs_ch = &(xpcs_data->xpcs_ch[channel]);
+		if (channel == xpcs_ch->ch_id)
+			break;
+	}
+
+	if (i == QCA8084_CHANNEL_MAX) {
+		dev_err(&xpcs_mdiodev->dev, "Invalid channel %d\n", channel);
+		return;
+	}
+
+	mmd = qca8084_xpcs_ch_mmd[channel];
+
+	ret = qca8084_xpcs_an_restart(xpcs_mdiodev, channel);
+	if (ret)
+		return;
+
+	switch (speed) {
+	case SPEED_2500:
+		rate = 312500000;
+		xpcs_rate = PCS_SPEED_2500;
+		break;
+	case SPEED_1000:
+		rate = 125000000;
+		xpcs_rate = PCS_SPEED_1000;
+		break;
+	case SPEED_100:
+		rate = 25000000;
+		xpcs_rate = PCS_SPEED_100;
+		break;
+	case SPEED_10:
+	default:
+		rate = 2500000;
+		xpcs_rate = PCS_SPEED_10;
+		break;
+	}
+
+	clk_set_rate(xpcs_ch->clks[XPCS_RX_CLK], rate);
+	clk_set_rate(xpcs_ch->clks[XPCS_TX_CLK], rate);
+
+	/* XGMII takes the different clock rate 78.125Mhz from XPCS clock
+	 * when linked at 2500M.
+	 */
+	if (speed == SPEED_2500)
+		rate = 78125000;
+
+	clk_set_rate(xpcs_ch->clks[XPCS_XGMII_RX_CLK], rate);
+	clk_set_rate(xpcs_ch->clks[XPCS_XGMII_TX_CLK], rate);
+
+	ret = mdiodev_c45_modify(xpcs_mdiodev, mmd, MII_CONTROL,
+				 PCS_SPEED_2500 | PCS_SPEED_1000 |
+				 PCS_SPEED_100 | PCS_SPEED_10,
+				 xpcs_rate);
+	if (ret)
+		return;
+
+	/* Disable clocks if link down with unknown speed. The channel clocks
+	 * are disabled by default, __clk_is_enabled() is used to avoid
+	 * disabling the clocks that is already in the disabled status.
+	 */
+	if (speed == SPEED_UNKNOWN) {
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_RX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_RX_CLK]);
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_TX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_TX_CLK]);
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_PORT_RX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_PORT_RX_CLK]);
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_PORT_TX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_PORT_TX_CLK]);
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_XGMII_RX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_XGMII_RX_CLK]);
+		if (__clk_is_enabled(xpcs_ch->clks[XPCS_XGMII_TX_CLK]))
+			clk_disable_unprepare(xpcs_ch->clks[XPCS_XGMII_TX_CLK]);
+	} else {
+		clk_prepare_enable(xpcs_ch->clks[XPCS_RX_CLK]);
+		clk_prepare_enable(xpcs_ch->clks[XPCS_TX_CLK]);
+		clk_prepare_enable(xpcs_ch->clks[XPCS_PORT_RX_CLK]);
+		clk_prepare_enable(xpcs_ch->clks[XPCS_PORT_TX_CLK]);
+		clk_prepare_enable(xpcs_ch->clks[XPCS_XGMII_RX_CLK]);
+		clk_prepare_enable(xpcs_ch->clks[XPCS_XGMII_TX_CLK]);
+	}
+
+	msleep(100);
+
+	ret = reset_control_reset(xpcs_ch->rstcs);
+	if (ret)
+		return;
+
+	/* Reset IPG tune of PCS device. */
+	ret = qca8084_pcs_ipg_tune_reset(pcs_mdiodev, BIT(channel));
+	if (ret)
+		return;
+
+	if (channel == 0)
+		mdiodev_c45_modify(xpcs_mdiodev, MDIO_MMD_PCS, DIG_CTRL1,
+				   FIFO_RESET_CH0, FIFO_RESET_CH0);
+	else
+		mdiodev_c45_modify(xpcs_mdiodev, mmd, DIG_CTRL1,
+				   FIFO_RESET_CH1_CH2_CH3,
+				   FIFO_RESET_CH1_CH2_CH3);
 }
