@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0+
 
-#include <dt-bindings/net/qcom,qca808x.h>
 #include <linux/phy.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/reset.h>
 #include <linux/clk.h>
+#include <dt-bindings/net/qcom,qca808x.h>
 
 #include "../phylib.h"
 #include "qcom.h"
