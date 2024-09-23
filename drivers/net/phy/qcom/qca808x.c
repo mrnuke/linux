@@ -931,6 +931,12 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
 		return ret;
 
 	usleep_range(10000, 11000);
+
+	/* Configure PCS working on 10G-QXGMII mode */
+	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII)
+		ret = qca8084_qxgmii_set_mode(shared_priv->mdiodev[1],
+					      shared_priv->mdiodev[0]);
+
 	return ret;
 }
 
@@ -1164,6 +1170,9 @@ static int qca8084_probe(struct phy_device *phydev)
 
 static void qca8084_remove(struct phy_device *phydev)
 {
+	if (phydev->interface != PHY_INTERFACE_MODE_10G_QXGMII)
+		return;
+
 	if (phy_package_remove_once(phydev))
 		qca8084_phy_package_remove_once(phydev);
 }
