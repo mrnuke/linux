@@ -17,4 +17,7 @@ void qca8084_package_xpcs_and_pcs_remove(struct mdio_device *xpcs_mdiodev,
 					 struct mdio_device *pcs_mdiodev);
 int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
 			    struct mdio_device *pcs_mdiodev);
+void qca8084_qxgmii_set_speed(struct mdio_device *xpcs_mdiodev,
+			      struct mdio_device *pcs_mdiodev,
+			      int channel, int speed);
 #endif /* _QCA8084_SERDES_H_ */
