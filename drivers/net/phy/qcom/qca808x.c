@@ -1007,14 +1007,25 @@ static void qca8084_link_change_notify(struct phy_device *phydev)
 		}
 	}
 
-	/* Enable IPG level 10 to 11 tuning for link speed 1000M in the
+	/* Enable IPG level 10 to 11 tuning for link speed 1000M and
+	 * configure the related XPCS channel with the phydev in the
 	 * 10G_QXGMII mode.
 	 */
-	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII)
+	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
+		struct qca808x_priv *priv = phydev->priv;
+		struct qca808x_shared_priv *shared_priv;
+
+		shared_priv = phy_package_get_priv(phydev);
 		phy_modify_mmd(phydev, MDIO_MMD_AN, QCA8084_MMD7_IPG_OP,
 			       QCA8084_IPG_10_TO_11_EN,
 			       phydev->speed == SPEED_1000 ?
 			       QCA8084_IPG_10_TO_11_EN : 0);
+
+		qca8084_qxgmii_set_speed(shared_priv->mdiodev[1],
+					 shared_priv->mdiodev[0],
+					 priv->channel_id,
+					 phydev->speed);
+	}
 }
 
 /* QCA8084 is a four-port PHY, which integrates the clock controller,
