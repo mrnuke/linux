@@ -5470,7 +5470,7 @@ static const struct mtk_soc_data mt2701_data = {
 		.desc_size = sizeof(struct mtk_rx_dma),
 		.irq_done_mask = MTK_RX_DONE_INT,
 		.dma_l4_valid = RX_DMA_L4_VALID,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
 	},
@@ -5498,7 +5498,7 @@ static const struct mtk_soc_data mt7621_data = {
 		.desc_size = sizeof(struct mtk_rx_dma),
 		.irq_done_mask = MTK_RX_DONE_INT,
 		.dma_l4_valid = RX_DMA_L4_VALID,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
 	},
@@ -5528,7 +5528,7 @@ static const struct mtk_soc_data mt7622_data = {
 		.desc_size = sizeof(struct mtk_rx_dma),
 		.irq_done_mask = MTK_RX_DONE_INT,
 		.dma_l4_valid = RX_DMA_L4_VALID,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
 	},
@@ -5557,7 +5557,7 @@ static const struct mtk_soc_data mt7623_data = {
 		.desc_size = sizeof(struct mtk_rx_dma),
 		.irq_done_mask = MTK_RX_DONE_INT,
 		.dma_l4_valid = RX_DMA_L4_VALID,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
 	},
@@ -5583,7 +5583,7 @@ static const struct mtk_soc_data mt7629_data = {
 		.desc_size = sizeof(struct mtk_rx_dma),
 		.irq_done_mask = MTK_RX_DONE_INT,
 		.dma_l4_valid = RX_DMA_L4_VALID,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
 	},
@@ -5615,7 +5615,7 @@ static const struct mtk_soc_data mt7981_data = {
 		.dma_l4_valid = RX_DMA_L4_VALID_V2,
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(512),
 	},
 };
 
@@ -5645,7 +5645,7 @@ static const struct mtk_soc_data mt7986_data = {
 		.dma_l4_valid = RX_DMA_L4_VALID_V2,
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(1K),
 	},
 };
 
@@ -5698,7 +5698,7 @@ static const struct mtk_soc_data rt5350_data = {
 		.dma_l4_valid = RX_DMA_L4_VALID_PDMA,
 		.dma_max_len = MTK_TX_DMA_BUF_LEN,
 		.dma_len_offset = 16,
-		.dma_size = MTK_DMA_SIZE(2K),
+		.dma_size = MTK_DMA_SIZE(256),
 	},
 };
 
