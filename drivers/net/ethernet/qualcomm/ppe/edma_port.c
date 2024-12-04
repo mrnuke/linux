@@ -355,13 +355,25 @@ int edma_port_setup(struct ppe_port *port)
 	int port_id = port->port_id;
 	struct net_device *netdev;
 	u8 mac_addr[ETH_ALEN];
+	const char *name;
+	int assign_type;
 	int ret = 0;
 	u8 *maddr;
 
-	netdev = alloc_etherdev_mqs(sizeof(struct edma_port_priv),
-				    EDMA_NETDEV_QUEUE_NUM, EDMA_NETDEV_QUEUE_NUM);
+	name = of_get_property(np, "label", NULL);
+	if (name) {
+		assign_type = NET_NAME_PREDICTABLE;
+	} else {
+		name = "eth%d";
+		assign_type = NET_NAME_ENUM;
+	}
+
+	netdev = alloc_netdev_mqs(sizeof(struct edma_port_priv),
+				  name, assign_type,
+				  ether_setup,
+				  EDMA_NETDEV_QUEUE_NUM, EDMA_NETDEV_QUEUE_NUM);
 	if (!netdev) {
-		pr_err("alloc_etherdev() failed\n");
+		dev_err(ppe_dev->dev, "alloc_netdev_mqs() failed\n");
 		return -ENOMEM;
 	}
 
