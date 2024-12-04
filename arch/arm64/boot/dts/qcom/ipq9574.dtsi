@@ -14,6 +14,7 @@
 #include <dt-bindings/reset/qcom,ipq9574-gcc.h>
 #include <dt-bindings/clock/qcom,ipq9574-nsscc.h>
 #include <dt-bindings/reset/qcom,ipq9574-nsscc.h>
+#include <dt-bindings/clock/qcom,ipq-pcs-uniphy.h>
 #include <dt-bindings/thermal/thermal.h>
 
 / {
@@ -1243,12 +1244,12 @@
 				 <&cmn_pll NSS_1200MHZ_CLK>,
 				 <&cmn_pll PPE_353MHZ_CLK>,
 				 <&gcc GPLL0_OUT_AUX>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
+				 <&pcsuniphy0 UNIPHY_NSS_RX_CLK>,
+				 <&pcsuniphy0 UNIPHY_NSS_TX_CLK>,
+				 <&pcsuniphy1 UNIPHY_NSS_RX_CLK>,
+				 <&pcsuniphy1 UNIPHY_NSS_TX_CLK>,
+				 <&pcsuniphy2 UNIPHY_NSS_RX_CLK>,
+				 <&pcsuniphy2 UNIPHY_NSS_TX_CLK>,
 				 <&gcc GCC_NSSCC_CLK>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
