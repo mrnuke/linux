@@ -87,11 +87,17 @@
 	phy4: ethernet-phy@8 {
 		compatible ="ethernet-phy-ieee802.3-c45";
 		reg = <8>;
+
+		nvmem-cells = <&aqr_fw>;
+		nvmem-cell-names = "firmware";
 	};
 
 	phy5: ethernet-phy@0 {
 		compatible ="ethernet-phy-ieee802.3-c45";
 		reg = <0>;
+
+		nvmem-cells = <&aqr_fw>;
+		nvmem-cell-names = "firmware";
 	};
 };
 
