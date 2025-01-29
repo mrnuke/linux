@@ -189,6 +189,34 @@
 		nand-ecc-engine = <&qpic_nand>;
 		nand-ecc-strength = <4>;
 		nand-ecc-step-size = <512>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:training";
+				reg = <0x0 0x80000>;
+				read-only;
+			};
+
+			partition@80000 {
+				label = "0:license";
+				reg = <0x80000 0x40000>;
+				read-only;
+			};
+
+			partition@c0000 {
+				label = "rootfs";
+				reg = <0xc0000 0x3c00000>;
+			};
+
+			partition@3cc0000 {
+				label = "rootfs_1";
+				reg = <0x3cc0000 0x3c00000>;
+			};
+		};
 	};
 };
 
