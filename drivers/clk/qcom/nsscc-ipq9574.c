@@ -3060,6 +3060,7 @@ MODULE_DEVICE_TABLE(of, nss_cc_ipq9574_match_table);
 
 static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct regmap *regmap;
 	int ret;
 
@@ -3075,6 +3076,18 @@ static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Fail to add bus clock\n");
 
+	ret = pm_clk_add(&pdev->dev, "nssnoc");
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire nssnoc clock\n");
+
+	ret = pm_clk_add(&pdev->dev, "snoc");
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire snoc clock\n");
+
+	ret = pm_clk_add(&pdev->dev, "snoc_1");
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire snoc_1 clock\n");
+
 	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Fail to resume\n");
@@ -3089,7 +3102,15 @@ static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 	clk_alpha_pll_configure(&ubi32_pll_main, regmap, &ubi32_pll_config);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &nss_cc_ipq9574_desc, regmap);
+	if (ret)
+		goto err_put_pm;
+
 	pm_runtime_put(&pdev->dev);
+
+	return 0;
+
+err_put_pm:
+	pm_runtime_put_sync(dev);
 
 	return ret;
 }
