@@ -259,6 +259,37 @@ int pm_clk_add_clk(struct device *dev, struct clk *clk)
 }
 EXPORT_SYMBOL_GPL(pm_clk_add_clk);
 
+/**
+ * of_pm_clk_add_clk_index - Start using a device clock for power management.
+ * @dev: Device whose clock is going to be used for power management.
+ * @index: Index of clock that is going to be used for power management.
+ *
+ * Add the clock described in the 'clocks' device-tree node at the index
+ * provided, to the list of clocks used for the power management of @dev.
+ * On success, returns 0. Returns a negative error code if the clock is not
+ * found or cannot be added.
+ */
+int of_pm_clk_add_clk_index(struct device *dev, int index)
+{
+	struct clk *clk;
+	int ret;
+
+	if (!dev || !dev->of_node || index < 0)
+		return -EINVAL;
+
+	clk = of_clk_get(dev->of_node, index);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	ret = pm_clk_add_clk(dev, clk);
+	if (ret) {
+		clk_put(clk);
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_pm_clk_add_clk_index);
 
 /**
  * of_pm_clk_add_clk - Start using a device clock for power management.
