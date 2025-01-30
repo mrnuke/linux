@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/pm_clock.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
 
@@ -41,6 +43,9 @@ enum {
 	DT_UNIPHY1_NSS_TX_CLK,
 	DT_UNIPHY2_NSS_RX_CLK,
 	DT_UNIPHY2_NSS_TX_CLK,
+	DT_GCC_NSSNOC_NSSCC_CLK,
+	DT_GCC_NSSNOC_SNOC_CLK,
+	DT_GCC_NSSNOC_SNOC_1_CLK,
 };
 
 enum {
@@ -3046,6 +3051,10 @@ static const struct qcom_cc_desc nss_cc_ipq9574_desc = {
 	.icc_first_node_id = IPQ_NSSCC_ID,
 };
 
+static const struct dev_pm_ops nsscc_pm_ops = {
+	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
+};
+
 static const struct of_device_id nss_cc_ipq9574_match_table[] = {
 	{ .compatible = "qcom,ipq9574-nsscc" },
 	{ }
@@ -3054,7 +3063,33 @@ MODULE_DEVICE_TABLE(of, nss_cc_ipq9574_match_table);
 
 static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct regmap *regmap;
+	int ret;
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
+
+	ret = devm_pm_clk_create(dev);
+	if (ret)
+		return ret;
+
+	ret = of_pm_clk_add_clk_index(dev, DT_GCC_NSSNOC_NSSCC_CLK);
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire nssnoc clock\n");
+
+	ret = of_pm_clk_add_clk_index(dev, DT_GCC_NSSNOC_SNOC_CLK);
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire snoc clock\n");
+
+	ret = of_pm_clk_add_clk_index(dev, DT_GCC_NSSNOC_SNOC_1_CLK);
+	if (ret)
+		return dev_err_probe(dev, ret,"failed to acquire snoc_1 clock\n");
+
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		return ret;
 
 	regmap = qcom_cc_map(pdev, &nss_cc_ipq9574_desc);
 	if (IS_ERR(regmap))
@@ -3062,7 +3097,18 @@ static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 
 	clk_alpha_pll_configure(&ubi32_pll_main, regmap, &ubi32_pll_config);
 
-	return qcom_cc_really_probe(&pdev->dev, &nss_cc_ipq9574_desc, regmap);
+	ret = qcom_cc_really_probe(dev, &nss_cc_ipq9574_desc, regmap);
+	if (ret)
+		goto err_put_pm;
+
+	pm_runtime_put(dev);
+
+	return 0;
+
+err_put_pm:
+	pm_runtime_put_sync(dev);
+
+	return ret;
 }
 
 static struct platform_driver nss_cc_ipq9574_driver = {
@@ -3071,6 +3117,7 @@ static struct platform_driver nss_cc_ipq9574_driver = {
 		.name = "qcom,nsscc-ipq9574",
 		.of_match_table = nss_cc_ipq9574_match_table,
 		.sync_state = icc_sync_state,
+		.pm = &nsscc_pm_ops,
 	},
 };
 
