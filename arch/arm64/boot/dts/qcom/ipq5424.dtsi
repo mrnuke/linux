@@ -274,6 +274,18 @@
 			status = "disabled";
 		};
 
+		mdio: mdio@90000 {
+			compatible = "qcom,ipq4019-mdio", "qcom,ipq5424-mdio";
+			reg = <0 0x00090000 0 0x64>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			pinctrl-0 = <&mdio_pins>;
+			pinctrl-names = "default";
+			clocks = <&gcc GCC_MDIO_AHB_CLK>;
+			clock-names = "gcc_mdio_ahb_clk";
+			status = "disabled";
+		};
+
 		cmn_pll: clock-controller@9b000 {
 			compatible = "qcom,ipq5424-cmn-pll";
 			reg = <0 0x0009b000 0 0x800>;
@@ -315,6 +327,22 @@
 				function = "uart1";
 				drive-strength = <8>;
 				bias-pull-up;
+			};
+
+			mdio_pins: mdio-pins {
+				mdc-state {
+					pins = "gpio22";
+					function = "mdc_mst";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
+
+				mdio-state {
+					pins = "gpio23";
+					function = "mdio_mst";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
 			};
 		};
 

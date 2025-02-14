@@ -195,6 +195,24 @@
 	status = "okay";
 };
 
+&mdio {
+	phy0: ethernet-phy@8 {
+		compatible ="ethernet-phy-ieee802.3-c45";
+		reg = <8>;
+		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <100000>;
+	};
+
+	phy1: ethernet-phy@c {
+		compatible ="ethernet-phy-ieee802.3-c45";
+		reg = <0xc>;
+		reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <100000>;
+	};
+};
+
 /*
  * The bootstrap pins for the board select the XO clock frequency that
  * supports 48 MHZ, 96 MHZ or 192 MHZ. This setting automatically
