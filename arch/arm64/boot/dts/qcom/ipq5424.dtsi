@@ -10,8 +10,10 @@
 #include <dt-bindings/clock/qcom,ipq5424-cmn-pll.h>
 #include <dt-bindings/clock/qcom,ipq5424-gcc.h>
 #include <dt-bindings/clock/qcom,ipq5424-nsscc.h>
+#include <dt-bindings/interconnect/qcom,ipq5424.h>
 #include <dt-bindings/net/qcom,ipq9574-pcs.h>
 #include <dt-bindings/reset/qcom,ipq5424-gcc.h>
+#include <dt-bindings/reset/qcom,ipq5424-nsscc.h>
 #include <dt-bindings/interconnect/qcom,ipq5424.h>
 #include <dt-bindings/gpio/gpio.h>
 
@@ -1133,6 +1135,37 @@
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#interconnect-cells = <1>;
+		};
+
+		qcom_ppe: ethernet@3a000000 {
+			compatible = "qcom,ipq5424-ppe";
+			reg = <0 0x3a000000 0 0xbef800>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clocks = <&nsscc NSS_CC_PPE_SWITCH_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_CFG_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_IPE_CLK>,
+				 <&nsscc NSS_CC_PPE_SWITCH_BTQ_CLK>;
+			clock-names = "ppe",
+				      "apb",
+				      "ipe",
+				      "btq";
+			resets = <&nsscc NSS_CC_PPE_BCR>;
+			interconnects = <&nsscc MASTER_NSSNOC_PPE
+					 &nsscc SLAVE_NSSNOC_PPE>,
+					<&nsscc MASTER_NSSNOC_PPE_CFG
+					 &nsscc SLAVE_NSSNOC_PPE_CFG>,
+					<&nsscc MASTER_NSSNOC_CE_AXI
+					 &nsscc SLAVE_NSSNOC_CE_AXI>,
+					<&nsscc MASTER_NSSNOC_CE_APB
+					 &nsscc SLAVE_NSSNOC_CE_APB>,
+					<&nsscc MASTER_NSSNOC_NSS_CSR
+					 &nsscc SLAVE_NSSNOC_NSS_CSR>;
+			interconnect-names = "ppe",
+					     "ppe_cfg",
+					     "nssnoc_ce_axi",
+					     "nssnoc_ce_apb",
+					     "nssnoc_nss_csr";
 		};
 	};
 
