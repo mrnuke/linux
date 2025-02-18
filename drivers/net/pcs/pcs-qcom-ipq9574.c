@@ -780,6 +780,7 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id ipq9574_pcs_of_mtable[] = {
+	{ .compatible = "qcom,ipq5424-pcs" },
 	{ .compatible = "qcom,ipq9574-pcs" },
 	{ /* sentinel */ },
 };

@@ -42,8 +42,9 @@ config PCS_QCOM_IPQ9574
 	depends on HAS_IOMEM && COMMON_CLK
 	help
 	  This module provides driver for UNIPHY PCS available on Qualcomm
-	  IPQ9574 SoC. The UNIPHY PCS supports both PCS and XPCS functions
-	  to support different interface modes for MAC to PHY connections.
+	  IPQ9574, IPQ5424 series SoCs. The UNIPHY PCS supports both PCS and
+	  XPCS functions to support different interface modes for MAC to PHY
+	  connections.
 
 config PCS_QCA8K
 	tristate
