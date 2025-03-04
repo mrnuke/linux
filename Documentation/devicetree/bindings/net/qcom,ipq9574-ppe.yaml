@@ -101,24 +101,38 @@ properties:
     description: PPE reset, which is necessary before configuring PPE hardware
 
   interconnects:
-    items:
-      - description: Clock path leading to PPE switch core function
-      - description: Clock path leading to PPE register access
-      - description: Clock path leading to QoS generation
-      - description: Clock path leading to timeout reference
-      - description: Clock path leading to NSS NOC from memory NOC
-      - description: Clock path leading to memory NOC from NSS NOC
-      - description: Clock path leading to enhanced memory NOC from NSS NOC
+    oneOf:
+      - items:
+          - description: Clock path leading to PPE switch core function
+          - description: Clock path leading to PPE register access
+          - description: Clock path leading to QoS generation
+          - description: Clock path leading to timeout reference
+          - description: Clock path leading to NSS NOC from memory NOC
+          - description: Clock path leading to memory NOC from NSS NOC
+          - description: Clock path leading to enhanced memory NOC from NSS NOC
+      - items:
+          - description: Clock path leading to PPE switch core function
+          - description: Clock path leading to PPE register access
+          - description: Clock path leading to CE AXI
+          - description: Clock path leading to CE APB
+          - description: Clock path leading to NSS CSR access
 
   interconnect-names:
-    items:
-      - const: ppe
-      - const: ppe_cfg
-      - const: qos_gen
-      - const: timeout_ref
-      - const: nssnoc_memnoc
-      - const: memnoc_nssnoc
-      - const: memnoc_nssnoc_1
+    oneOf:
+      - items:
+          - const: ppe
+          - const: ppe_cfg
+          - const: qos_gen
+          - const: timeout_ref
+          - const: nssnoc_memnoc
+          - const: memnoc_nssnoc
+          - const: memnoc_nssnoc_1
+      - items:
+          - const: ppe
+          - const: ppe_cfg
+          - const: nssnoc_ce_axi
+          - const: nssnoc_ce_apb
+          - const: nssnoc_nss_csr
 
   ethernet-dma:
     type: object
