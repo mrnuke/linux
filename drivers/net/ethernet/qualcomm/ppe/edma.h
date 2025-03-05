@@ -81,6 +81,8 @@ struct edma_ring_info {
  * @max_ports: Maximum number of ports
  * @napi_budget_rx: Rx NAPI budget
  * @napi_budget_tx: Tx NAPI budget
+ * @tso_max: Max segment processing capacity of HW for TSO
+ * @idx_mask: Mask for producer, consumer index and ring size
  */
 struct edma_hw_info {
 	struct edma_ring_info *rxfill;
@@ -90,6 +92,8 @@ struct edma_hw_info {
 	u32 max_ports;
 	u32 napi_budget_rx;
 	u32 napi_budget_tx;
+	u32 tso_max;
+	u32 idx_mask;
 };
 
 /**

@@ -153,6 +153,7 @@ static int edma_cfg_rx_desc_ring_to_queue_mapping(void)
 static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 data, reg;
 
@@ -162,9 +163,16 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id);
 	regmap_write(regmap, reg, (u32)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK));
 
-	data = rxdesc_ring->count & EDMA_RXDESC_RING_SIZE_MASK;
-	data |= (EDMA_RXDESC_PL_DEFAULT_VALUE & EDMA_RXDESC_PL_OFFSET_MASK)
-		 << EDMA_RXDESC_PL_OFFSET_SHIFT;
+	data = rxdesc_ring->count & idx_mask;
+
+	/* For SOC's where Rxdesc ring register do not contain PL offset
+	 * fields, skip writing that data into the Register.
+	 */
+	if (ppe_dev->type != IPQ5424_PPE) {
+		data |= (EDMA_RXDESC_PL_DEFAULT_VALUE & EDMA_RXDESC_PL_OFFSET_MASK)
+			 << EDMA_RXDESC_PL_OFFSET_SHIFT;
+	}
+
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_RING_SIZE(rxdesc_ring->ring_id);
 	regmap_write(regmap, reg, data);
 
@@ -405,18 +413,21 @@ void edma_cfg_rx_ring_mappings(void)
 static void edma_cfg_rx_fill_ring_cleanup(struct edma_rxfill_ring *rxfill_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	struct device *dev = ppe_dev->dev;
-	u16 cons_idx, curr_idx;
+	u32 cons_idx, curr_idx;
 	u32 data, reg;
 
 	/* Get RxFill ring producer index */
-	curr_idx = rxfill_ring->prod_idx & EDMA_RXFILL_PROD_IDX_MASK;
+
+	curr_idx = rxfill_ring->prod_idx & idx_mask;
 
 	/* Get RxFill ring consumer index */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id);
 	regmap_read(regmap, reg, &data);
-	cons_idx = data & EDMA_RXFILL_CONS_IDX_MASK;
+
+	cons_idx = data & idx_mask;
 
 	while (curr_idx != cons_idx) {
 		struct edma_rxfill_desc *rxfill_desc;
@@ -491,16 +502,18 @@ static int edma_cfg_rx_desc_ring_dma_alloc(struct edma_rxdesc_ring *rxdesc_ring)
 static void edma_cfg_rx_desc_ring_cleanup(struct edma_rxdesc_ring *rxdesc_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	struct device *dev = ppe_dev->dev;
 	u32 prod_idx, cons_idx, reg;
 
 	/* Get Rxdesc consumer & producer indices */
-	cons_idx = rxdesc_ring->cons_idx & EDMA_RXDESC_CONS_IDX_MASK;
+	cons_idx = rxdesc_ring->cons_idx & idx_mask;
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id);
 	regmap_read(regmap, reg, &prod_idx);
-	prod_idx = prod_idx & EDMA_RXDESC_PROD_IDX_MASK;
+
+	prod_idx = prod_idx & idx_mask;
 
 	/* Free any buffers assigned to any descriptors */
 	while (cons_idx != prod_idx) {
@@ -641,14 +654,20 @@ rxdesc_mem_alloc_fail:
 static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 ring_sz, reg;
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_BA(rxfill_ring->ring_id);
 	regmap_write(regmap, reg, (u32)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
 
-	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
-	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id);
+	ring_sz = rxfill_ring->count & idx_mask;
+
+	if (ppe_dev->type == IPQ5424_PPE)
+		reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_BUFFER1_SIZE(rxfill_ring->ring_id);
+	else
+		reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id);
+
 	regmap_write(regmap, reg, ring_sz);
 
 	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
@@ -922,6 +941,7 @@ void edma_cfg_rx_napi_delete(void)
 		if (!rxdesc_ring->napi_added)
 			continue;
 
+		napi_disable(&rxdesc_ring->napi);
 		netif_napi_del(&rxdesc_ring->napi);
 		rxdesc_ring->napi_added = false;
 	}

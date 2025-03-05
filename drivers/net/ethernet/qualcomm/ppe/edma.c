@@ -122,6 +122,49 @@ static struct edma_hw_info ipq9574_hw_info = {
 	.max_ports = 6,
 	.napi_budget_rx = 32,
 	.napi_budget_tx = 512,
+	.tso_max = 32,
+	.idx_mask = 0xffff,
+};
+
+/* Rx Fill ring info for IPQ5424 */
+static struct edma_ring_info ipq5424_rxfill_ring_info = {
+	.max_rings = 8,
+	.ring_start = 4,
+	.num_rings = 4,
+};
+
+/* Rx ring info for IPQ5424 */
+static struct edma_ring_info ipq5424_rx_ring_info = {
+	.max_rings = 24,
+	.ring_start = 20,
+	.num_rings = 4,
+};
+
+/* Tx ring info for IPQ5424 */
+static struct edma_ring_info ipq5424_tx_ring_info = {
+	.max_rings = 32,
+	.ring_start = 4,
+	.num_rings = 12,
+};
+
+/* Tx complete ring info for IPQ5424 */
+static struct edma_ring_info ipq5424_txcmpl_ring_info = {
+	.max_rings = 32,
+	.ring_start = 4,
+	.num_rings = 12,
+};
+
+/* HW info for IPQ5424 */
+static struct edma_hw_info ipq5424_hw_info = {
+	.rxfill = &ipq5424_rxfill_ring_info,
+	.rx = &ipq5424_rx_ring_info,
+	.tx = &ipq5424_tx_ring_info,
+	.txcmpl = &ipq5424_txcmpl_ring_info,
+	.max_ports = 3,
+	.napi_budget_rx = 128,
+	.napi_budget_tx = 256,
+	.tso_max = 48,
+	.idx_mask = 0xffffffff,
 };
 
 static int edma_clock_set_and_enable(struct device *dev,
@@ -588,23 +631,44 @@ static int edma_hw_reset(void)
 	struct device *dev = ppe_dev->dev;
 	struct reset_control *edma_hw_rst;
 	struct device_node *edma_np;
+	const char *reset_string;
+	u32 count, i;
+	int ret;
 
+	/* Count and parse reset names from DTSI. */
 	edma_np = of_get_child_by_name(dev->of_node, "edma");
-	edma_hw_rst = of_reset_control_get_exclusive(edma_np, NULL);
-	if (IS_ERR(edma_hw_rst)) {
+	count = of_property_count_strings(edma_np, "reset-names");
+	if (count < 0) {
+		dev_err(dev, "EDMA reset entry not found\n");
 		of_node_put(edma_np);
-		return PTR_ERR(edma_hw_rst);
+		return -EINVAL;
 	}
 
-	/* 100ms delay is required by hardware to reset EDMA. */
-	reset_control_assert(edma_hw_rst);
-	fsleep(100);
+	for (i = 0; i < count; i++) {
+		ret = of_property_read_string_index(edma_np, "reset-names",
+						    i, &reset_string);
+		if (ret) {
+			dev_err(dev, "Error reading reset-names");
+			of_node_put(edma_np);
+			return -EINVAL;
+		}
 
-	reset_control_deassert(edma_hw_rst);
-	fsleep(100);
+		edma_hw_rst = of_reset_control_get_exclusive(edma_np, reset_string);
+		if (IS_ERR(edma_hw_rst)) {
+			of_node_put(edma_np);
+			return PTR_ERR(edma_hw_rst);
+		}
 
-	reset_control_put(edma_hw_rst);
-	dev_dbg(dev, "EDMA HW reset\n");
+		/* 100ms delay is required by hardware to reset EDMA. */
+		reset_control_assert(edma_hw_rst);
+		fsleep(100);
+
+		reset_control_deassert(edma_hw_rst);
+		fsleep(100);
+
+		reset_control_put(edma_hw_rst);
+		dev_dbg(dev, "EDMA HW reset, i:%d reset_string:%s\n", i, reset_string);
+	}
 
 	of_node_put(edma_np);
 
@@ -849,7 +913,11 @@ int edma_setup(struct ppe_device *ppe_dev)
 	if (!edma_ctx)
 		return -ENOMEM;
 
-	edma_ctx->hw_info = &ipq9574_hw_info;
+	if (ppe_dev->type == IPQ9574_PPE)
+		edma_ctx->hw_info = &ipq9574_hw_info;
+	else
+		edma_ctx->hw_info = &ipq5424_hw_info;
+
 	edma_ctx->ppe_dev = ppe_dev;
 	edma_ctx->rx_buf_size = rx_buff_size;
 

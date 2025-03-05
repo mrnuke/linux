@@ -62,6 +62,7 @@ static u32 edma_tx_num_descs_for_sg(struct sk_buff *skb)
 enum edma_tx_gso_status edma_tx_gso_segment(struct sk_buff *skb,
 					    struct net_device *netdev, struct sk_buff **segs)
 {
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
 	u32 num_tx_desc_needed;
 
 	/* Check is skb is non-linear to proceed. */
@@ -69,7 +70,7 @@ enum edma_tx_gso_status edma_tx_gso_segment(struct sk_buff *skb,
 		return EDMA_TX_GSO_NOT_NEEDED;
 
 	num_tx_desc_needed = edma_tx_num_descs_for_sg(skb);
-	if (likely(num_tx_desc_needed <= EDMA_TX_TSO_SEG_MAX))
+	if (likely(num_tx_desc_needed <= hw_info->tso_max))
 		return EDMA_TX_GSO_NOT_NEEDED;
 
 	/* GSO segmentation of the skb into multiple segments. */
@@ -99,6 +100,7 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 {
 	struct edma_txcmpl_stats *txcmpl_stats = &txcmpl_ring->txcmpl_stats;
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 cons_idx, end_idx, data, cpu_id;
 	struct device *dev = ppe_dev->dev;
@@ -117,7 +119,8 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 		/* Get Tx cmpl ring producer index. */
 		reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_PROD_IDX(txcmpl_ring->id);
 		regmap_read(regmap, reg, &data);
-		prod_idx = data & EDMA_TXCMPL_PROD_IDX_MASK;
+
+		prod_idx = data & idx_mask;
 
 		avail = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, EDMA_TX_RING_SIZE);
 		txcmpl_ring->avail_pkt = avail;
@@ -645,12 +648,14 @@ static u32 edma_tx_avail_desc(struct edma_txdesc_ring *txdesc_ring,
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	u32 data = 0, avail = 0, hw_next_to_clean = 0;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 reg;
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_CONS_IDX(txdesc_ring->id);
 	regmap_read(regmap, reg, &data);
-	hw_next_to_clean = data & EDMA_TXDESC_CONS_IDX_MASK;
+
+	hw_next_to_clean = data & idx_mask;
 
 	avail = EDMA_DESC_AVAIL_COUNT(hw_next_to_clean - 1,
 				      hw_next_to_use, EDMA_TX_RING_SIZE);
@@ -676,12 +681,14 @@ enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 {
 	struct edma_txdesc_stats *txdesc_stats = &txdesc_ring->txdesc_stats;
 	struct edma_port_priv *port_priv = netdev_priv(netdev);
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
 	u32 num_tx_desc_needed = 0, num_desc_filled = 0;
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct ppe_port *port = port_priv->ppe_port;
 	struct regmap *regmap = ppe_dev->regmap;
 	struct edma_txdesc_pri *txdesc = NULL;
 	struct device *dev = ppe_dev->dev;
+	u32 idx_mask = hw_info->idx_mask;
 	int port_id = port->port_id;
 	u32 hw_next_to_use = 0;
 	u32 reg;
@@ -726,9 +733,9 @@ enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 		 * HW hangs up if it sees more than 32 segments. Kernel Perform GSO
 		 * for such packets with netdev gso_max_segs set to 32.
 		 */
-		if (unlikely(num_tx_desc_needed > EDMA_TX_TSO_SEG_MAX)) {
+		if (unlikely(num_tx_desc_needed > hw_info->tso_max)) {
 			netdev_dbg(netdev, "Number of segments %u more than %u for %d ring\n",
-				   num_tx_desc_needed, EDMA_TX_TSO_SEG_MAX, txdesc_ring->id);
+				   num_tx_desc_needed, hw_info->tso_max, txdesc_ring->id);
 			u64_stats_update_begin(&txdesc_stats->syncp);
 			++txdesc_stats->tso_max_seg_exceed;
 			u64_stats_update_end(&txdesc_stats->syncp);
@@ -785,7 +792,8 @@ enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 	EDMA_TXDESC_OPAQUE_SET(txdesc, skb);
 
 	/* Update producer index. */
-	txdesc_ring->prod_idx = hw_next_to_use & EDMA_TXDESC_PROD_IDX_MASK;
+	txdesc_ring->prod_idx = hw_next_to_use & idx_mask;
+
 	txdesc_ring->avail_desc -= num_desc_filled;
 
 	netdev_dbg(netdev, "%s: skb:%pK tx_ring:%u proto:0x%x skb->len:%d\n port:%u prod_idx:%u ip_summed:0x%x\n",

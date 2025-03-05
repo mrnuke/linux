@@ -55,6 +55,7 @@ static int edma_cfg_txcmpl_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
 static void edma_cfg_tx_desc_ring_cleanup(struct edma_txdesc_ring *txdesc_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	struct edma_txdesc_pri *txdesc = NULL;
 	struct device *dev =  ppe_dev->dev;
@@ -64,11 +65,13 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_txdesc_ring *txdesc_ring)
 	/* Free any buffers assigned to any descriptors. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id);
 	regmap_read(regmap, reg, &data);
-	prod_idx = data & EDMA_TXDESC_PROD_IDX_MASK;
+
+	prod_idx = data & idx_mask;
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_CONS_IDX(txdesc_ring->id);
 	regmap_read(regmap, reg, &data);
-	cons_idx = data & EDMA_TXDESC_CONS_IDX_MASK;
+
+	cons_idx = data & idx_mask;
 
 	/* Walk active list, obtain skb from descriptor and free it. */
 	while (cons_idx != prod_idx) {
@@ -130,6 +133,7 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 data, reg;
 
@@ -140,12 +144,16 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 	regmap_write(regmap, reg, (u32)(txdesc_ring->sdma & EDMA_RING_DMA_MASK));
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_RING_SIZE(txdesc_ring->id);
-	regmap_write(regmap, reg, (u32)(txdesc_ring->count & EDMA_TXDESC_RING_SIZE_MASK));
+
+	regmap_write(regmap, reg, (u32)(txdesc_ring->count & idx_mask));
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id);
 	regmap_write(regmap, reg, (u32)EDMA_TX_INITIAL_PROD_IDX);
 
-	data = FIELD_PREP(EDMA_TXDESC_CTRL_FC_GRP_ID_MASK, txdesc_ring->fc_grp_id);
+	if (ppe_dev->type == IPQ5424_PPE)
+		data = FIELD_PREP(EDMA_TXDESC_CTRL_FC_GRP_ID_MASK_IPQ54XX, txdesc_ring->fc_grp_id);
+	else
+		data = FIELD_PREP(EDMA_TXDESC_CTRL_FC_GRP_ID_MASK, txdesc_ring->fc_grp_id);
 
 	/* Configure group ID for flow control for this Tx ring. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_CTRL(txdesc_ring->id);
@@ -155,6 +163,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 static void edma_cfg_txcmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 data, reg;
 
@@ -163,7 +172,7 @@ static void edma_cfg_txcmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 	regmap_write(regmap, reg, (u32)(txcmpl_ring->dma & EDMA_RING_DMA_MASK));
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_RING_SIZE(txcmpl_ring->id);
-	regmap_write(regmap, reg, (u32)(txcmpl_ring->count & EDMA_TXDESC_RING_SIZE_MASK));
+	regmap_write(regmap, reg, (u32)(txcmpl_ring->count & idx_mask));
 
 	/* Set Tx cmpl ret mode to opaque. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_CTRL(txcmpl_ring->id);
@@ -633,6 +642,7 @@ void edma_cfg_tx_napi_delete(u32 port_id)
 		if (!txcmpl_ring->napi_added)
 			continue;
 
+		napi_disable(&txcmpl_ring->napi);
 		netif_napi_del(&txcmpl_ring->napi);
 		txcmpl_ring->napi_added = false;
 	}

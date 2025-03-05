@@ -907,23 +907,12 @@
 /* Rx Descriptor ring pre-header base address mask */
 #define EDMA_RXDESC_PREHEADER_BA_MASK		0xffffffff
 
-/* Tx descriptor producer ring index mask */
-#define EDMA_TXDESC_PROD_IDX_MASK		0xffff
-
-/* Tx descriptor consumer ring index mask */
-#define EDMA_TXDESC_CONS_IDX_MASK		0xffff
-
-/* Tx descriptor ring size mask */
-#define EDMA_TXDESC_RING_SIZE_MASK		0xffff
-
 /* Tx descriptor ring enable */
 #define EDMA_TXDESC_TX_ENABLE			0x1
 
 #define EDMA_TXDESC_CTRL_TXEN_MASK		BIT(0)
-#define EDMA_TXDESC_CTRL_FC_GRP_ID_MASK		GENMASK(3, 1)
-
-/* Tx completion ring producer index mask */
-#define EDMA_TXCMPL_PROD_IDX_MASK		0xffff
+#define EDMA_TXDESC_CTRL_FC_GRP_ID_MASK         GENMASK(3, 1)
+#define EDMA_TXDESC_CTRL_FC_GRP_ID_MASK_IPQ54XX GENMASK(4, 1)
 
 /* Tx completion ring urgent threshold mask */
 #define EDMA_TXCMPL_LOW_THRE_MASK		0xffff
@@ -932,15 +921,6 @@
 /* EDMA_REG_TX_MOD_TIMER mask */
 #define EDMA_TX_MOD_TIMER_INIT_MASK		0xffff
 #define EDMA_TX_MOD_TIMER_INIT_SHIFT		0
-
-/* Rx fill ring producer index mask */
-#define EDMA_RXFILL_PROD_IDX_MASK		0xffff
-
-/* Rx fill ring consumer index mask */
-#define EDMA_RXFILL_CONS_IDX_MASK		0xffff
-
-/* Rx fill ring size mask */
-#define EDMA_RXFILL_RING_SIZE_MASK		0xffff
 
 /* Rx fill ring flow control threshold masks */
 #define EDMA_RXFILL_FC_XON_THRE_MASK		0x7ff
@@ -951,14 +931,6 @@
 /* Rx fill ring enable bit */
 #define EDMA_RXFILL_RING_EN			0x1
 
-/* Rx desc ring producer index mask */
-#define EDMA_RXDESC_PROD_IDX_MASK		0xffff
-
-/* Rx descriptor ring consumer index mask */
-#define EDMA_RXDESC_CONS_IDX_MASK		0xffff
-
-/* Rx descriptor ring size masks */
-#define EDMA_RXDESC_RING_SIZE_MASK		0xffff
 #define EDMA_RXDESC_PL_OFFSET_MASK		0x1ff
 #define EDMA_RXDESC_PL_OFFSET_SHIFT		16
 #define EDMA_RXDESC_PL_DEFAULT_VALUE		0

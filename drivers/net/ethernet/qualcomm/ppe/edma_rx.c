@@ -446,6 +446,7 @@ static int edma_rx_reap(struct edma_rxdesc_ring *rxdesc_ring, int budget)
 	u32 alloc_size = rxdesc_ring->rxfill->alloc_size;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	u32 idx_mask = edma_ctx->hw_info->idx_mask;
 	struct edma_rxdesc_pri *next_rxdesc_pri;
 	struct regmap *regmap = ppe_dev->regmap;
 	struct device *dev = ppe_dev->dev;
@@ -462,7 +463,9 @@ static int edma_rx_reap(struct edma_rxdesc_ring *rxdesc_ring, int budget)
 	} else {
 		reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id);
 		regmap_read(regmap, reg, &prod_idx);
-		prod_idx = prod_idx & EDMA_RXDESC_PROD_IDX_MASK;
+
+		prod_idx = prod_idx & idx_mask;
+
 		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx,
 						   cons_idx, EDMA_RX_RING_SIZE);
 		rxdesc_ring->work_leftover = work_to_do;
