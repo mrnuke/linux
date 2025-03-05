@@ -9,6 +9,8 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/qcom,ipq5424-cmn-pll.h>
 #include <dt-bindings/clock/qcom,ipq5424-gcc.h>
+#include <dt-bindings/clock/qcom,ipq5424-nsscc.h>
+#include <dt-bindings/net/qcom,ipq9574-pcs.h>
 #include <dt-bindings/reset/qcom,ipq5424-gcc.h>
 #include <dt-bindings/interconnect/qcom,ipq5424.h>
 #include <dt-bindings/gpio/gpio.h>
@@ -481,6 +483,60 @@
 				snps,hird-threshold = /bits/ 8 <0x0>;
 				snps,dis_u2_susphy_quirk;
 				snps,dis_u3_susphy_quirk;
+			};
+		};
+
+		pcs0: ethernet-pcs@7a00000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "qcom,ipq5424-pcs";
+			reg = <0 0x7a00000 0 0x10000>;
+			clocks = <&gcc GCC_UNIPHY0_SYS_CLK>,
+				 <&gcc GCC_UNIPHY0_AHB_CLK>;
+			clock-names = "sys",
+				      "ahb";
+			#clock-cells = <1>;
+			status = "disabled";
+
+			pcs0_mii0: pcs-mii@0 {
+				reg = <0>;
+				status = "disabled";
+			};
+		};
+
+		pcs1: ethernet-pcs@7a10000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "qcom,ipq5424-pcs";
+			reg = <0 0x7a10000 0 0x10000>;
+			clocks = <&gcc GCC_UNIPHY1_SYS_CLK>,
+				 <&gcc GCC_UNIPHY1_AHB_CLK>;
+			clock-names = "sys",
+				      "ahb";
+			#clock-cells = <1>;
+			status = "disabled";
+
+			pcs1_mii0: pcs-mii@0 {
+				reg = <0>;
+				status = "disabled";
+			};
+		};
+
+		pcs2: ethernet-pcs@7a20000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "qcom,ipq5424-pcs";
+			reg = <0 0x7a20000 0 0x10000>;
+			clocks = <&gcc GCC_UNIPHY2_SYS_CLK>,
+				 <&gcc GCC_UNIPHY2_AHB_CLK>;
+			clock-names = "sys",
+				      "ahb";
+			#clock-cells = <1>;
+			status = "disabled";
+
+			pcs2_mii0: pcs-mii@0 {
+				reg = <0>;
+				status = "disabled";
 			};
 		};
 
@@ -1049,19 +1105,19 @@
 			};
 		};
 
-		clock-controller@39b00000 {
+		nsscc: clock-controller@39b00000 {
 			compatible = "qcom,ipq5424-nsscc";
 			reg = <0 0x39b00000 0 0x800>;
 			clocks = <&cmn_pll IPQ5424_XO_24MHZ_CLK>,
 				 <&cmn_pll IPQ5424_NSS_300MHZ_CLK>,
 				 <&cmn_pll IPQ5424_PPE_375MHZ_CLK>,
 				 <&gcc GPLL0_OUT_AUX>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
-				 <0>,
+				 <&pcs0 PCS_RX_CLK>,
+				 <&pcs0 PCS_TX_CLK>,
+				 <&pcs1 PCS_RX_CLK>,
+				 <&pcs1 PCS_TX_CLK>,
+				 <&pcs2 PCS_RX_CLK>,
+				 <&pcs2 PCS_TX_CLK>,
 				 <&gcc GCC_NSSCC_CLK>;
 			clock-names = "xo",
 				      "nss_300",
