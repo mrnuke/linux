@@ -28,3 +28,9 @@ config QCA807X_PHY
 	help
 	  Currently supports the Qualcomm QCA8072, QCA8075 and the PSGMII
 	  control PHY.
+
+config QCA81XX_PHY
+	tristate "Qualcomm QCA81XX PHYs"
+	select QCOM_NET_PHYLIB
+	help
+	  Currently supports the QCA8101, QCA8102, QCA8111 and QCA8112 model.

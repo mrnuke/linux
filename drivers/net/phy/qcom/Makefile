@@ -4,3 +4,4 @@ obj-$(CONFIG_AT803X_PHY)	+= at803x.o
 obj-$(CONFIG_QCA83XX_PHY)	+= qca83xx.o
 obj-$(CONFIG_QCA808X_PHY)	+= qca808x.o qca8084_serdes.o
 obj-$(CONFIG_QCA807X_PHY)	+= qca807x.o
+obj-$(CONFIG_QCA81XX_PHY)	+= qca81xx.o
