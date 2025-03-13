@@ -1194,6 +1194,50 @@
 					     "nssnoc_ce_axi",
 					     "nssnoc_ce_apb",
 					     "nssnoc_nss_csr";
+			edma {
+				clocks = <&nsscc NSS_CC_PPE_EDMA_CLK>,
+					 <&nsscc NSS_CC_PPE_EDMA_CFG_CLK>;
+				clock-names = "sys",
+					      "apb";
+				resets = <&nsscc NSS_CC_PPE_EDMA_CLK_ARES>,
+					 <&nsscc NSS_CC_PPE_EDMA_CFG_CLK_ARES>;
+				reset-names = "edma_rst",
+					      "edma_cfg_rst";
+				interrupts = <0 286 4>,			/* Tx complete ring id #4 IRQ info */
+						<0 287 4>,		/* Tx complete ring id #5 IRQ info */
+						<0 288 4>,		/* Tx complete ring id #6 IRQ info */
+						<0 289 4>,		/* Tx complete ring id #7 IRQ info */
+						<0 290 4>,		/* Tx complete ring id #8 IRQ info */
+						<0 291 4>,		/* Tx complete ring id #9 IRQ info */
+						<0 292 4>,		/* Tx complete ring id #10 IRQ info */
+						<0 293 4>,		/* Tx complete ring id #11 IRQ info */
+						<0 294 4>,		/* Tx complete ring id #12 IRQ info */
+						<0 295 4>,		/* Tx complete ring id #13 IRQ info */
+						<0 296 4>,		/* Tx complete ring id #14 IRQ info */
+						<0 297 4>,		/* Tx complete ring id #15 IRQ info */
+						<0 270 4>,		/* Rx desc ring id #20 IRQ info */
+						<0 271 4>,		/* Rx desc ring id #21 IRQ info */
+						<0 272 4>,		/* Rx desc ring id #22 IRQ info */
+						<0 273 4>,		/* Rx desc ring id #23 IRQ info */
+						<0 314 4>;		/* Misc error IRQ info */
+				interrupt-names = "txcmpl_4",
+						  "txcmpl_5",
+						  "txcmpl_6",
+						  "txcmpl_7",
+						  "txcmpl_8",
+						  "txcmpl_9",
+						  "txcmpl_10",
+						  "txcmpl_11",
+						  "txcmpl_12",
+						  "txcmpl_13",
+						  "txcmpl_14",
+						  "txcmpl_15",
+						  "rxdesc_20",
+						  "rxdesc_21",
+						  "rxdesc_22",
+						  "rxdesc_23",
+						  "misc";
+			};
 		};
 	};
 
