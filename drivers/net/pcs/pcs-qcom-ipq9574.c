@@ -13,6 +13,7 @@
 #include <linux/phylink.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 
 #include <dt-bindings/net/qcom,ipq9574-pcs.h>
 
@@ -139,6 +140,7 @@ struct ipq_pcs {
 	struct clk_hw tx_hw;
 
 	struct ipq_pcs_mii *qpcs_mii[PCS_MAX_MII_NRS];
+	struct reset_control *xpcs_rstc;
 };
 
 #define phylink_pcs_to_qpcs_mii(_pcs)	\
@@ -277,7 +279,11 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 {
 	unsigned long rate = 125000000;
 	unsigned int val, mask;
+	bool xpcs_mode = false;
 	int ret;
+
+	/* Assert XPCS reset */
+	reset_control_assert(qpcs->xpcs_rstc);
 
 	/* Configure PCS interface mode */
 	mask = PCS_MODE_SEL_MASK;
@@ -303,6 +309,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	case PHY_INTERFACE_MODE_10GBASER:
 		val = PCS_MODE_XPCS;
 		rate = 312500000;
+		xpcs_mode = true;
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -354,6 +361,10 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		dev_err(qpcs->dev, "Failed to set TX clock rate\n");
 		return ret;
 	}
+
+	/* Deassert XPCS */
+	if (xpcs_mode)
+		reset_control_deassert(qpcs->xpcs_rstc);
 
 	return 0;
 }
@@ -967,6 +978,11 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
 	if (IS_ERR(clk))
 		return dev_err_probe(dev, PTR_ERR(clk),
 				     "Failed to enable AHB clock\n");
+
+	qpcs->xpcs_rstc = devm_reset_control_get_optional(dev, NULL);
+	if (IS_ERR_OR_NULL(qpcs->xpcs_rstc))
+		return dev_err_probe(dev, PTR_ERR(qpcs->xpcs_rstc),
+				     "Failed to get XPCS reset\n");
 
 	ret = ipq_pcs_clk_register(qpcs);
 	if (ret)

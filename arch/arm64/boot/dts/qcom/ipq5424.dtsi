@@ -525,6 +525,7 @@
 				 <&gcc GCC_UNIPHY0_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
+			resets = <&gcc GCC_UNIPHY0_XPCS_ARES>;
 			#clock-cells = <1>;
 			status = "disabled";
 
@@ -543,6 +544,7 @@
 				 <&gcc GCC_UNIPHY1_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
+			resets = <&gcc GCC_UNIPHY1_XPCS_ARES>;
 			#clock-cells = <1>;
 			status = "disabled";
 
@@ -561,6 +563,7 @@
 				 <&gcc GCC_UNIPHY2_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
+			resets = <&gcc GCC_UNIPHY2_XPCS_ARES>;
 			#clock-cells = <1>;
 			status = "disabled";
 
