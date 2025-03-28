@@ -520,7 +520,7 @@ static int ipq_unipcs_config_sgmii(struct ipq_uniphy_pcs *qunipcs,
 		mutex_unlock(&qunipcs->shared_lock);
 
 	/* In-band autoneg mode is enabled by default for each PCS channel */
-	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+	if (interface != PHY_INTERFACE_MODE_1000BASEX)
 		return 0;
 
 	/* Force speed mode */
@@ -758,10 +758,11 @@ ipq_unipcs_link_up_clock_rate_set(struct ipq_uniphy_pcs_ch *qunipcs_ch,
 static void ipq_unipcs_link_up_config_sgmii(struct ipq_uniphy_pcs *qunipcs,
 					    int channel,
 					    unsigned int neg_mode,
-					    int speed)
+					    int speed,
+					    phy_interface_t interface)
 {
 	/* No need to config PCS speed if in-band autoneg is enabled */
-	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+	if (interface != PHY_INTERFACE_MODE_1000BASEX)
 		goto pcs_adapter_reset;
 
 	/* PCS speed set for force mode */
@@ -966,7 +967,7 @@ static void ipq_unipcs_link_up(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_PSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
 		ipq_unipcs_link_up_config_sgmii(qunipcs, channel,
-						neg_mode, speed);
+						neg_mode, speed, interface);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		ipq_unipcs_link_up_config_2500basex(qunipcs,
