@@ -20,6 +20,11 @@
 #define PCS_CALIBRATION			0x1e0
 #define PCS_CALIBRATION_DONE		BIT(7)
 
+#define PCS_MISC2			0x218
+#define PCS_MISC2_MODE_MASK		GENMASK(6, 5)
+#define PCS_MISC2_MODE_SGMII		FIELD_PREP(PCS_MISC2_MODE_MASK, 0x1)
+#define PCS_MISC2_MODE_SGMII_PLUS	FIELD_PREP(PCS_MISC2_MODE_MASK, 0x2)
+
 #define PCS_MODE_CTRL			0x46c
 #define PCS_MODE_SEL_MASK		GENMASK(12, 8)
 #define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
@@ -422,6 +427,9 @@ static int ipq_unipcs_config_mode(struct ipq_uniphy_pcs *qunipcs,
 		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
 					PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
 					PCS_MODE_SGMII);
+		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+					PCS_MISC2_MODE_MASK,
+					PCS_MISC2_MODE_SGMII);
 		break;
 	case PHY_INTERFACE_MODE_QSGMII:
 		rate = 125000000;
@@ -438,17 +446,25 @@ static int ipq_unipcs_config_mode(struct ipq_uniphy_pcs *qunipcs,
 					PCS_MODE_PSGMII);
 		break;
 	case PHY_INTERFACE_MODE_1000BASEX:
+		rate = 125000000;
 		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
 					PCS_MODE_SEL_MASK |
 					PCS_MODE_SGMII_CTRL_MASK,
 					PCS_MODE_SGMII |
 					PCS_MODE_SGMII_CTRL_1000BASEX);
+		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+					PCS_MISC2_MODE_MASK,
+					PCS_MISC2_MODE_SGMII);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		rate = 312500000;
 		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
 					PCS_MODE_SEL_MASK,
 					PCS_MODE_SGMII_PLUS);
+		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+					PCS_MISC2_MODE_MASK,
+					PCS_MISC2_MODE_SGMII_PLUS);
+
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
 	case PHY_INTERFACE_MODE_10GBASER:
