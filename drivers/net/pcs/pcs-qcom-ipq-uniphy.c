@@ -490,7 +490,7 @@ static int ipq_unipcs_config_mode(struct ipq_uniphy_pcs *qunipcs,
 
 	/* PCS PLL reset */
 	ipq_unipcs_reg_modify32(qunipcs, PCS_PLL_RESET, PCS_ANA_SW_RESET, 0);
-	fsleep(10000);
+	fsleep(20000);
 	ipq_unipcs_reg_modify32(qunipcs, PCS_PLL_RESET,
 				PCS_ANA_SW_RESET, PCS_ANA_SW_RESET);
 
