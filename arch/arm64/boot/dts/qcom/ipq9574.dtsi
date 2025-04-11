@@ -1252,7 +1252,8 @@
 				 <&pcsuniphy2 UNIPHY_NSS_TX_CLK>,
 				 <&gcc GCC_NSSNOC_NSSCC_CLK>,
 				 <&gcc GCC_NSSNOC_SNOC_CLK>,
-				 <&gcc GCC_NSSNOC_SNOC_1_CLK>;
+				 <&gcc GCC_NSSNOC_SNOC_1_CLK>,
+				 <&gcc GCC_NSSCC_CLK>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
