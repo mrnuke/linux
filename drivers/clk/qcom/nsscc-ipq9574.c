@@ -46,6 +46,7 @@ enum {
 	DT_GCC_NSSNOC_NSSCC_CLK,
 	DT_GCC_NSSNOC_SNOC_CLK,
 	DT_GCC_NSSNOC_SNOC_1_CLK,
+	DT_GCC_NSS_BUS_CLK,
 };
 
 enum {
@@ -3074,6 +3075,10 @@ static int nss_cc_ipq9574_probe(struct platform_device *pdev)
 	ret = devm_pm_clk_create(dev);
 	if (ret)
 		return ret;
+
+	ret = of_pm_clk_add_clk_index(dev, DT_GCC_NSS_BUS_CLK);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Fail to add bus clock\n");
 
 	ret = of_pm_clk_add_clk_index(dev, DT_GCC_NSSNOC_NSSCC_CLK);
 	if (ret)
