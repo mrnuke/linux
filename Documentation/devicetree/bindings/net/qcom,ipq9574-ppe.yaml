@@ -138,9 +138,12 @@ properties:
     type: object
     additionalProperties: false
     description:
-      EDMA (Ethernet DMA) is used to transmit packets between PPE and ARM
-      host CPU. There are 32 TX descriptor rings, 32 TX completion rings,
-      24 RX descriptor rings and 8 RX fill rings supported.
+      EDMA (Ethernet DMA) driver for IPQ9574 and IPQ5424 SoC. This driver
+      supports the Qualcomm Technologies, Inc. EDMA control and transfer
+      functions on IPQ9574 and IPQ5424 platform. 6 ethernet ports are
+      supported for IPQ9574 and 3 ethernet ports are supported for IPQ5424.
+      There are 32 Tx descriptor rings, 32 Tx completion rings,
+      24 Rx descriptor rings and 8 Rx fill rings.
 
     properties:
       clocks:
@@ -154,30 +157,79 @@ properties:
           - const: sys
           - const: apb
 
-      resets:
-        maxItems: 1
-        description: EDMA reset from NSS clock controller
+    allOf:
+      - if:
+          properties:
+            compatible:
+              contains:
+                const: qcom,ipq5424-ppe
+        then:
+          properties:
+            resets:
+              maxItems: 2
+              items:
+                - description: EDMA reset from NSS clock controller
+                - description: EDMA configuration reset from NSS clock controller
 
-      interrupts:
-        minItems: 29
-        maxItems: 57
+            reset-names:
+              items:
+                - const: edma_rst
+                - const: edma_cfg_rst
 
-      interrupt-names:
-        minItems: 29
-        maxItems: 57
-        items:
-          pattern: '^(txcmpl_([0-9]|[1-2][0-9]|3[0-1])|rxdesc_([0-9]|1[0-9]|2[0-3])|misc)$'
-        description:
-          Interrupts "txcmpl_[0-31]" are the Ethernet DMA Tx completion ring interrupts.
-          Interrupts "rxdesc_[0-23]" are the Ethernet DMA Rx Descriptor ring interrupts.
-          Interrupt "misc" is the Ethernet DMA miscellaneous error interrupt.
+           interrupts:
+             minItems: 17
+             maxItems: 41
+
+           interrupt-names:
+             minItems: 17
+             maxItems: 41
+             items:
+               pattern: '^(txcmpl_([0-9]|[1-2][0-9]|3[0-1])|rxdesc_([0-9]|1[0-9]|2[0-3])|misc)$'
+             description:
+               Interrupts "txcmpl_[0-31]" are the Ethernet DMA Tx completion ring interrupts.
+               Interrupts "rxdesc_[0-23]" are the Ethernet DMA Rx Descriptor ring interrupts.
+               Interrupt "misc" is the Ethernet DMA miscellaneous error interrupt.
+
+      - if:
+          properties:
+            compatible:
+              contains:
+                const: qcom,ipq9574-edma
+        then:
+          properties:
+            resets:
+              maxItems: 1
+              items:
+                - description: EDMA reset from NSS clock controller
+
+            reset-names:
+              items:
+                - const: edma_rst
+
+            interrupts:
+              minItems: 29
+              maxItems: 57
+
+            interrupt-names:
+             minItems: 29
+             maxItems: 57
+             items:
+               pattern: '^(txcmpl_([0-9]|[1-2][0-9]|3[0-1])|rxdesc_([0-9]|1[0-9]|2[0-3])|misc)$'
+             description:
+               Interrupts "txcmpl_[0-31]" are the Ethernet DMA Tx completion ring interrupts.
+               Interrupts "rxdesc_[0-23]" are the Ethernet DMA Rx Descriptor ring interrupts.
+               Interrupt "misc" is the Ethernet DMA miscellaneous error interrupt.
 
     required:
+      - compatible
       - clocks
       - clock-names
       - resets
+      - reset-names
       - interrupts
       - interrupt-names
+
+unevaluatedProperties: false
 
 required:
   - compatible
