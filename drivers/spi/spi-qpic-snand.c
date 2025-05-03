@@ -995,7 +995,7 @@ err_core_clk:
 	return ret;
 }
 
-static int qcom_snand_remove(struct platform_device *pdev)
+static void qcom_snand_remove(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr = platform_get_drvdata(pdev);
 	struct qcom_nand_controller *snandc = spi_controller_get_devdata(ctlr);
@@ -1009,7 +1009,6 @@ static int qcom_snand_remove(struct platform_device *pdev)
 
 	dma_unmap_resource(&pdev->dev, snandc->base_dma, resource_size(res),
 			   DMA_BIDIRECTIONAL, 0);
-	return 0;
 }
 
 static const struct qcom_nandc_props ipq9574_snandc_props = {
