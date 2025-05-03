@@ -4410,7 +4410,7 @@ static int gcc_ipq9574_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x17028, BIT(0), BIT(0)); /* gcc_nssnoc_snoc_clk */
 	regmap_update_bits(regmap, 0x1707C, BIT(0), BIT(0)); /* gcc_nssnoc_snoc_1_clk */
 
-	return qcom_cc_really_probe(pdev, &gcc_ipq9574_desc, regmap);
+	return qcom_cc_really_probe(&pdev->dev, &gcc_ipq9574_desc, regmap);
 }
 
 static struct platform_driver gcc_ipq9574_driver = {
