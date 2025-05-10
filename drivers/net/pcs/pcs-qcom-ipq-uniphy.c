@@ -1184,9 +1184,11 @@ static int ipq_uniphy_probe(struct platform_device *pdev)
 		priv->clk[i] = devm_clk_get_optional_enabled(dev,
 							     pcs_clock_name[i]);
 
-		if (IS_ERR(priv->clk[i]))
+		if (IS_ERR(priv->clk[i])) {
 			dev_err(dev, "Failed to get the clock ID %s\n",
 				pcs_clock_name[i]);
+			return PTR_ERR(priv->clk[i]);
+		}
 	}
 
 	for (i = 0; i < PCS_RESET_MAX; i++) {
