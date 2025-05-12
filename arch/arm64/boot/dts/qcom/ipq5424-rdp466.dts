@@ -346,6 +346,7 @@
 			reg = <1>;
 			phy-mode = "usxgmii";
 			managed = "in-band-status";
+			label = "wan";
 			phy-handle = <&phy0>;
 			pcs-handle = <&pcs0_mii0>;
 			clocks = <&nsscc NSS_CC_PORT1_MAC_CLK>,
@@ -366,6 +367,7 @@
 			reg = <2>;
 			phy-mode = "usxgmii";
 			managed = "in-band-status";
+			label = "lan5";
 			phy-handle = <&phy1>;
 			pcs-handle = <&pcs1_mii0>;
 			clocks = <&nsscc NSS_CC_PORT2_MAC_CLK>,
