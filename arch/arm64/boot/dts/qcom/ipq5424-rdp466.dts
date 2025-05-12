@@ -58,6 +58,27 @@
 		regulator-always-on;
 		regulator-name = "vdd_core_usb";
 	};
+};
+
+&mdio {
+	clock-frequency = <6250000>;
+	status = "okay";
+
+	phy0: ethernet-phy@8 {
+		compatible ="ethernet-phy-ieee802.3-c45";
+		reg = <8>;
+		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <100000>;
+	};
+
+	phy1: ethernet-phy@c {
+		compatible ="ethernet-phy-ieee802.3-c45";
+		reg = <0xc>;
+		reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <100000>;
+	};
 
 	ethernet-phy-package@1 {
 		compatible = "qcom,qca8084-package";
@@ -487,24 +508,6 @@
 
 &usb3 {
 	status = "okay";
-};
-
-&mdio {
-	phy0: ethernet-phy@8 {
-		compatible ="ethernet-phy-ieee802.3-c45";
-		reg = <8>;
-		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
-		reset-assert-us = <100000>;
-		reset-deassert-us = <100000>;
-	};
-
-	phy1: ethernet-phy@c {
-		compatible ="ethernet-phy-ieee802.3-c45";
-		reg = <0xc>;
-		reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
-		reset-assert-us = <100000>;
-		reset-deassert-us = <100000>;
-	};
 };
 
 /*
