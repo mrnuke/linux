@@ -457,7 +457,7 @@ static void ipq_pcs_disable(struct phylink_pcs *pcs)
 	clk_disable_unprepare(qpcs_mii->tx_clk);
 }
 
-static void ipq_pcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
+static void ipq_pcs_get_state(struct phylink_pcs *pcs,
 			      struct phylink_link_state *state)
 {
 	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
