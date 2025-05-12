@@ -580,20 +580,6 @@ static int ipq_pcs_create_miis(struct ipq_pcs *qpcs)
 		qpcs_mii->pcs.neg_mode = true;
 		qpcs_mii->pcs.poll = true;
 
-		qpcs_mii->rx_clk = devm_get_clk_from_child(dev, mii_np, "rx");
-		if (IS_ERR(qpcs_mii->rx_clk)) {
-			of_node_put(mii_np);
-			return dev_err_probe(dev, PTR_ERR(qpcs_mii->rx_clk),
-					     "Failed to get MII %d RX clock\n", index);
-		}
-
-		qpcs_mii->tx_clk = devm_get_clk_from_child(dev, mii_np, "tx");
-		if (IS_ERR(qpcs_mii->tx_clk)) {
-			of_node_put(mii_np);
-			return dev_err_probe(dev, PTR_ERR(qpcs_mii->tx_clk),
-					     "Failed to get MII %d TX clock\n", index);
-		}
-
 		qpcs->qpcs_mii[index] = qpcs_mii;
 	}
 
@@ -846,6 +832,22 @@ struct phylink_pcs *ipq_pcs_get(struct device_node *np)
 	if (!qpcs_mii) {
 		put_device(&pdev->dev);
 		return ERR_PTR(-ENOENT);
+	}
+
+	qpcs_mii->rx_clk = devm_get_clk_from_child(&pdev->dev, np, "rx");
+	if (IS_ERR(qpcs_mii->rx_clk)) {
+		put_device(&pdev->dev);
+		return dev_err_ptr_probe(&pdev->dev, PTR_ERR(qpcs_mii->rx_clk),
+					 "Failed to get MII %d RX clock\n",
+					 index);
+	}
+
+	qpcs_mii->tx_clk = devm_get_clk_from_child(&pdev->dev, np, "tx");
+	if (IS_ERR(qpcs_mii->tx_clk)) {
+		put_device(&pdev->dev);
+		return dev_err_ptr_probe(&pdev->dev, PTR_ERR(qpcs_mii->tx_clk),
+					 "Failed to get MII %d TX clock\n",
+					 index);
 	}
 
 	return &qpcs_mii->pcs;
