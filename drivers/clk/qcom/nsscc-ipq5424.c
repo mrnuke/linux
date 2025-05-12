@@ -1268,7 +1268,7 @@ static const struct regmap_config nss_cc_ipq5424_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_icc_hws_data icc_ipq5424_nss_hws[] = {
+static struct qcom_icc_hws_data icc_ipq5424_nss_hws[] = {
 	{ MASTER_NSSNOC_PPE, SLAVE_NSSNOC_PPE, NSS_CC_NSSNOC_PPE_CLK },
 	{ MASTER_NSSNOC_PPE_CFG, SLAVE_NSSNOC_PPE_CFG, NSS_CC_NSSNOC_PPE_CFG_CLK },
 	{ MASTER_NSSNOC_NSS_CSR, SLAVE_NSSNOC_NSS_CSR, NSS_CC_NSSNOC_NSS_CSR_CLK },
