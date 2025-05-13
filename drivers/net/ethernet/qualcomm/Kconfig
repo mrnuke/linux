@@ -67,7 +67,7 @@ config QCOM_PPE
 	depends on COMMON_CLK
 	select REGMAP_MMIO
 	select PHYLINK
-	select PCS_QCOM_IPQ_UNIPHY
+	select PCS_QCOM_IPQ9574
 	help
 	  This driver supports the Qualcomm Technologies, Inc. packet
 	  process engine (PPE) available with IPQ SoC. The PPE includes
