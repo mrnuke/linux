@@ -1279,6 +1279,10 @@
 			interconnects = <&gcc MASTER_NSSNOC_NSSCC &gcc SLAVE_NSSNOC_NSSCC>,
 					<&gcc MASTER_NSSNOC_SNOC_0 &gcc SLAVE_NSSNOC_SNOC_0>,
 					<&gcc MASTER_NSSNOC_SNOC_1 &gcc SLAVE_NSSNOC_SNOC_1>;
+
+			post-init-providers = <&pcs_uniphy0>,
+					      <&pcs_uniphy1>,
+					      <&pcs_uniphy2>;
 		};
 
 		qcom_ppe: ethernet@3a000000 {
