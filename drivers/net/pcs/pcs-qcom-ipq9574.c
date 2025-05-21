@@ -305,6 +305,11 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		return ret;
 	}
 
+	dev_err(qpcs->dev, "All your rate (%ld) are belong to us(%s %s)\n, phy-mode=%s\n",
+		rate,
+		__clk_get_name(qpcs->rx_hw.clk),
+		__clk_get_name(qpcs->tx_hw.clk),
+		phy_modes(interface));
 	return 0;
 }
 
@@ -438,6 +443,11 @@ ipq_unipcs_link_up_clock_rate_set(struct ipq_pcs_mii *qunipcs_ch,
 		dev_err(qpcs->dev, "Invalid PCS clock rate\n");
 		return;
 	}
+
+	dev_err(qpcs->dev, "All your link up (%ld) are belong to us(%s %s)\n",
+		rate,
+		__clk_get_name(qunipcs_ch->rx_clk),
+		__clk_get_name(qunipcs_ch->tx_clk));
 
 	clk_set_rate(qunipcs_ch->rx_clk, rate);
 	clk_set_rate(qunipcs_ch->tx_clk, rate);
