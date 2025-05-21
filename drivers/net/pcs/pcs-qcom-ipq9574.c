@@ -393,6 +393,11 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	if (xpcs_mode)
 		reset_control_deassert(qpcs->xpcs_rstc);
 
+	dev_err(qpcs->dev, "All your rate (%ld) are belong to us(%s %s), phy-mode=%s\n",
+		rate,
+		__clk_get_name(qpcs->rx_hw.clk),
+		__clk_get_name(qpcs->tx_hw.clk),
+		phy_modes(interface));
 	return 0;
 }
 
@@ -769,6 +774,8 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
 		/* Nothing to do here */
 		return;
 	default:
+		dev_err(qpcs->dev,
+			"interface %s not supported\n", phy_modes(interface));
 		return;
 	}
 
