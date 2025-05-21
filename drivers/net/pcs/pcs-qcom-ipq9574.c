@@ -250,6 +250,10 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	case PHY_INTERFACE_MODE_PSGMII:
 		val = PCS_MODE_PSGMII;
 		break;
+	case PHY_INTERFACE_MODE_10G_QXGMII:
+		// regmap_update_bits(qpcs->regmap, PCS_QP_USXG_OPTION,
+		// 		   PCS_MODE_SEL_MASK, val);
+		fallthrough;
 	case PHY_INTERFACE_MODE_USXGMII:
 		val = PCS_MODE_XPCS;
 		rate = 312500000;
@@ -421,6 +425,7 @@ ipq_unipcs_link_up_clock_rate_set(struct ipq_pcs_mii *qunipcs_ch,
 		rate = ipq_unipcs_clock_rate_get_gmii(speed);
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		rate = ipq_unipcs_clock_rate_get_xgmii(speed);
 		break;
 	default:
@@ -530,6 +535,7 @@ static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 	case PHY_INTERFACE_MODE_QSGMII:
 		return 0;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		/* USXGMII only supports full duplex mode */
 		phylink_clear(supported, 100baseT_Half);
 		phylink_clear(supported, 10baseT_Half);
@@ -546,6 +552,7 @@ static unsigned int ipq_pcs_inband_caps(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		return LINK_INBAND_DISABLE | LINK_INBAND_ENABLE;
 	default:
 		return 0;
@@ -600,6 +607,7 @@ static void ipq_pcs_get_state(struct phylink_pcs *pcs,
 		ipq_pcs_get_state_sgmii(qpcs, index, state);
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		ipq_pcs_get_state_usxgmii(qpcs, state);
 		break;
 	default:
@@ -630,6 +638,7 @@ static int ipq_pcs_config(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_PSGMII:
 		return ipq_pcs_config_sgmii(qpcs, index, neg_mode, interface);
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		return ipq_pcs_config_usxgmii(qpcs);
 	default:
 		dev_err(qpcs->dev,
@@ -660,6 +669,7 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
 						   neg_mode, speed);
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		ret = ipq_pcs_link_up_config_usxgmii(qpcs, speed);
 		break;
 	default:
@@ -730,6 +740,7 @@ static unsigned long ipq_pcs_clk_rate_get(struct ipq_pcs *qpcs)
 {
 	switch (qpcs->interface) {
 	case PHY_INTERFACE_MODE_USXGMII:
+	case PHY_INTERFACE_MODE_10G_QXGMII:
 		return 312500000;
 	default:
 		return 125000000;
