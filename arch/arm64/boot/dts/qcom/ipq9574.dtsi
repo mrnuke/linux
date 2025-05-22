@@ -1271,9 +1271,9 @@
 				 <&nsscc NSS_CC_PPE_SWITCH_IPE_CLK>,
 				 <&nsscc NSS_CC_PPE_SWITCH_BTQ_CLK>;
 			clock-names = "ppe",
-				      "ppe_cfg",
-				      "ppe_ipe",
-				      "ppe_btq";
+				      "apb",
+				      "ipe",
+				      "btq";
 			resets = <&nsscc PPE_FULL_RESET>;
 			interconnects = <&nsscc MASTER_NSSNOC_PPE
 					 &nsscc SLAVE_NSSNOC_PPE>,
@@ -1298,11 +1298,10 @@
 					     "memnoc_nssnoc_1";
 
 			edma {
-				compatible = "qcom,ipq9574-edma";
 				clocks = <&nsscc NSS_CC_PPE_EDMA_CLK>,
 					 <&nsscc NSS_CC_PPE_EDMA_CFG_CLK>;
-				clock-names = "edma",
-					      "edma-cfg";
+				clock-names = "sys",
+					      "apb";
 				resets = <&nsscc EDMA_HW_RESET>;
 				reset-names = "edma_rst";
 				interrupts = <GIC_SPI 371 IRQ_TYPE_LEVEL_HIGH>,
@@ -1334,143 +1333,118 @@
 					     <GIC_SPI 353 IRQ_TYPE_LEVEL_HIGH>,
 					     <GIC_SPI 354 IRQ_TYPE_LEVEL_HIGH>,
 					     <GIC_SPI 499 IRQ_TYPE_LEVEL_HIGH>;
-				interrupt-names = "edma_txcmpl_8",
-						  "edma_txcmpl_9",
-						  "edma_txcmpl_10",
-						  "edma_txcmpl_11",
-						  "edma_txcmpl_12",
-						  "edma_txcmpl_13",
-						  "edma_txcmpl_14",
-						  "edma_txcmpl_15",
-						  "edma_txcmpl_16",
-						  "edma_txcmpl_17",
-						  "edma_txcmpl_18",
-						  "edma_txcmpl_19",
-						  "edma_txcmpl_20",
-						  "edma_txcmpl_21",
-						  "edma_txcmpl_22",
-						  "edma_txcmpl_23",
-						  "edma_txcmpl_24",
-						  "edma_txcmpl_25",
-						  "edma_txcmpl_26",
-						  "edma_txcmpl_27",
-						  "edma_txcmpl_28",
-						  "edma_txcmpl_29",
-						  "edma_txcmpl_30",
-						  "edma_txcmpl_31",
-						  "edma_rxdesc_20",
-						  "edma_rxdesc_21",
-						  "edma_rxdesc_22",
-						  "edma_rxdesc_23",
-						  "edma_misc";
+				interrupt-names = "txcmpl_8",
+						  "txcmpl_9",
+						  "txcmpl_10",
+						  "txcmpl_11",
+						  "txcmpl_12",
+						  "txcmpl_13",
+						  "txcmpl_14",
+						  "txcmpl_15",
+						  "txcmpl_16",
+						  "txcmpl_17",
+						  "txcmpl_18",
+						  "txcmpl_19",
+						  "txcmpl_20",
+						  "txcmpl_21",
+						  "txcmpl_22",
+						  "txcmpl_23",
+						  "txcmpl_24",
+						  "txcmpl_25",
+						  "txcmpl_26",
+						  "txcmpl_27",
+						  "txcmpl_28",
+						  "txcmpl_29",
+						  "txcmpl_30",
+						  "txcmpl_31",
+						  "rxdesc_20",
+						  "rxdesc_21",
+						  "rxdesc_22",
+						  "rxdesc_23",
+						  "misc";
 			};
 		};
 
-		pcsuniphy0: ethernet-uniphy@7a00000 {
+		pcs0: ethernet-pcs@7a00000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			compatible = "qcom,ipq9574-uniphy";
+			compatible = "qcom,ipq9574-pcs";
 			reg = <0x7a00000 0x10000>;
 			clocks = <&gcc GCC_UNIPHY0_SYS_CLK>,
 				 <&gcc GCC_UNIPHY0_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
-			resets = <&gcc GCC_UNIPHY0_SYS_RESET>,
-				 <&gcc GCC_UNIPHY0_AHB_RESET>,
-				 <&gcc GCC_UNIPHY0_XPCS_RESET>;
-			reset-names = "sys",
-				      "ahb",
-				      "xpcs";
+			resets = <&gcc GCC_UNIPHY0_XPCS_RESET>;
 			#clock-cells = <1>;
 			clock-output-names = "uniphy0_nss_rx_clk",
 					     "uniphy0_nss_tx_clk";
+			status = "disabled";
 
-			pcsuniphy0_ch0: uniphy-ch@0 {
+			pcs0_ch0: pcs-ch@0 {
 				reg = <0>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT1_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT1_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
 			};
 
-			pcsuniphy0_ch1: uniphy-ch@1 {
+			pcs0_ch1: pcs-ch@1 {
 				reg = <1>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT2_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT2_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
 			};
 
-			pcsuniphy0_ch2: uniphy-ch@2 {
+			pcs0_ch2: pcs-ch@2 {
 				reg = <2>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT3_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT3_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
 			};
 
-			pcsuniphy0_ch3: uniphy-ch@3 {
+			pcs0_ch3: pcs-ch@3 {
 				reg = <3>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT4_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT4_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
+			};
+
+			pcs0_ch4: pcs-ch@4 {
+				reg = <4>;
+				status = "disabled";
 			};
 		};
 
-		pcsuniphy1: ethernet-uniphy@7a10000 {
+		pcs1: ethernet-pcs@7a10000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			compatible = "qcom,ipq9574-uniphy";
+			compatible = "qcom,ipq9574-pcs";
 			reg = <0x7a10000 0x10000>;
 			clocks = <&gcc GCC_UNIPHY1_SYS_CLK>,
 				 <&gcc GCC_UNIPHY1_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
-			resets = <&gcc GCC_UNIPHY1_SYS_RESET>,
-				 <&gcc GCC_UNIPHY1_AHB_RESET>,
-				 <&gcc GCC_UNIPHY1_XPCS_RESET>;
-			reset-names = "sys",
-				      "ahb",
-				      "xpcs";
 			#clock-cells = <1>;
+			resets = <&gcc GCC_UNIPHY1_XPCS_RESET>;
 			clock-output-names = "uniphy1_nss_rx_clk",
 					     "uniphy1_nss_tx_clk";
+			status = "disabled";
 
-			pcsuniphy1_ch0: uniphy-ch@0 {
+			pcs1_ch0: pcs-ch@0 {
 				reg = <0>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT5_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT5_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
 			};
 		};
 
-		pcsuniphy2: ethernet-uniphy@7a20000 {
+		pcs2: ethernet-pcs@7a20000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			compatible = "qcom,ipq9574-uniphy";
+			compatible = "qcom,ipq9574-pcs";
 			reg = <0x7a20000 0x10000>;
 			clocks = <&gcc GCC_UNIPHY2_SYS_CLK>,
 				 <&gcc GCC_UNIPHY2_AHB_CLK>;
 			clock-names = "sys",
 				      "ahb";
-			resets = <&gcc GCC_UNIPHY2_SYS_RESET>,
-				 <&gcc GCC_UNIPHY2_AHB_RESET>,
-				 <&gcc GCC_UNIPHY2_XPCS_RESET>;
-			reset-names = "sys",
-				      "ahb",
-				      "xpcs";
+			resets = <&gcc GCC_UNIPHY2_XPCS_RESET>;
 			#clock-cells = <1>;
 			clock-output-names = "uniphy2_nss_rx_clk",
 					     "uniphy2_nss_tx_clk";
+			status = "disabled";
 
-			pcsuniphy2_ch0: uniphy-ch@0 {
+			pcs2_ch0: pcs-ch@0 {
 				reg = <0>;
-				clocks = <&nsscc NSS_CC_UNIPHY_PORT6_RX_CLK>,
-					 <&nsscc NSS_CC_UNIPHY_PORT6_TX_CLK>;
-				clock-names = "ch_rx",
-					      "ch_tx";
+				status = "disabled";
 			};
 		};
 	};

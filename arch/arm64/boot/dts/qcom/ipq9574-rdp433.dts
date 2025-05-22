@@ -69,6 +69,7 @@
 
 		phy0: ethernet-phy@10 {
 			reg = <0x10>;
+			clocks = <&cmn_pll ETH_25MHZ_CLK>;
 		};
 
 		phy1: ethernet-phy@11 {
@@ -86,6 +87,7 @@
 
 	phy4: ethernet-phy@8 {
 		compatible ="ethernet-phy-ieee802.3-c45";
+		clocks = <&cmn_pll ETH1_50MHZ_CLK>;
 		reg = <8>;
 
 		nvmem-cells = <&aqr_fw>;
@@ -94,6 +96,7 @@
 
 	phy5: ethernet-phy@0 {
 		compatible ="ethernet-phy-ieee802.3-c45";
+		clocks = <&cmn_pll ETH2_50MHZ_CLK>;
 		reg = <0>;
 
 		nvmem-cells = <&aqr_fw>;
@@ -220,6 +223,67 @@
 	};
 };
 
+&pcs0 {
+        status = "okay";
+};
+
+&pcs0_ch0 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT1_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT1_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+&pcs0_ch1 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT2_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT2_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+&pcs0_ch2 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT3_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT3_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+&pcs0_ch3 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT4_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT4_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+&pcs1 {
+        status = "okay";
+};
+
+&pcs1_ch0 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT5_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT5_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+&pcs2{
+        status = "okay";
+};
+
+&pcs2_ch0 {
+        clocks = <&nsscc NSS_CC_UNIPHY_PORT6_RX_CLK>,
+                 <&nsscc NSS_CC_UNIPHY_PORT6_TX_CLK>;
+        clock-names = "rx",
+                      "tx";
+        status = "okay";
+};
+
+
 &qcom_ppe {
 	ethernet-ports {
 		#address-cells = <1>;
@@ -231,19 +295,19 @@
 			managed = "in-band-status";
 			label = "lan1";
 			phy-handle = <&phy0>;
-			pcs-handle = <&pcsuniphy0_ch0>;
+			pcs-handle = <&pcs0_ch0>;
 			clocks = <&nsscc NSS_CC_PORT1_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT1_RX_CLK>,
 				 <&nsscc NSS_CC_PORT1_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT1_MAC_ARES>,
 				 <&nsscc PORT1_RX_ARES>,
 				 <&nsscc PORT1_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 
 		port@2 {
@@ -252,19 +316,19 @@
 			managed = "in-band-status";
 			label = "lan2";
 			phy-handle = <&phy1>;
-			pcs-handle = <&pcsuniphy0_ch1>;
+			pcs-handle = <&pcs0_ch1>;
 			clocks = <&nsscc NSS_CC_PORT2_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT2_RX_CLK>,
 				 <&nsscc NSS_CC_PORT2_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT2_MAC_ARES>,
 				 <&nsscc PORT2_RX_ARES>,
 				 <&nsscc PORT2_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 
 		port@3 {
@@ -273,19 +337,19 @@
 			managed = "in-band-status";
 			label = "lan3";
 			phy-handle = <&phy2>;
-			pcs-handle = <&pcsuniphy0_ch2>;
+			pcs-handle = <&pcs0_ch2>;
 			clocks = <&nsscc NSS_CC_PORT3_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT3_RX_CLK>,
 				 <&nsscc NSS_CC_PORT3_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT3_MAC_ARES>,
 				 <&nsscc PORT3_RX_ARES>,
 				 <&nsscc PORT3_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 
 		port@4 {
@@ -294,19 +358,19 @@
 			managed = "in-band-status";
 			label = "lan4";
 			phy-handle = <&phy3>;
-			pcs-handle = <&pcsuniphy0_ch3>;
+			pcs-handle = <&pcs0_ch3>;
 			clocks = <&nsscc NSS_CC_PORT4_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT4_RX_CLK>,
 				 <&nsscc NSS_CC_PORT4_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT4_MAC_ARES>,
 				 <&nsscc PORT4_RX_ARES>,
 				 <&nsscc PORT4_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 
 		port@5 {
@@ -315,19 +379,19 @@
 			managed = "in-band-status";
 			label = "lan5";
 			phy-handle = <&phy4>;
-			pcs-handle = <&pcsuniphy1_ch0>;
+			pcs-handle = <&pcs1_ch0>;
 			clocks = <&nsscc NSS_CC_PORT5_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT5_RX_CLK>,
 				 <&nsscc NSS_CC_PORT5_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT5_MAC_ARES>,
 				 <&nsscc PORT5_RX_ARES>,
 				 <&nsscc PORT5_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 
 		port@6 {
@@ -336,19 +400,19 @@
 			managed = "in-band-status";
 			label = "wan";
 			phy-handle = <&phy5>;
-			pcs-handle = <&pcsuniphy2_ch0>;
+			pcs-handle = <&pcs2_ch0>;
 			clocks = <&nsscc NSS_CC_PORT6_MAC_CLK>,
 				 <&nsscc NSS_CC_PORT6_RX_CLK>,
 				 <&nsscc NSS_CC_PORT6_TX_CLK>;
-			clock-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			clock-names = "mac",
+				      "rx",
+				      "tx";
 			resets = <&nsscc PORT6_MAC_ARES>,
 				 <&nsscc PORT6_RX_ARES>,
 				 <&nsscc PORT6_TX_ARES>;
-			reset-names = "port_mac",
-				      "port_rx",
-				      "port_tx";
+			reset-names = "mac",
+				      "rx",
+				      "tx";
 		};
 	};
 };
