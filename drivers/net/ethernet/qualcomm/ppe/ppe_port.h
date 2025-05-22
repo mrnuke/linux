@@ -1,15 +1,22 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __PPE_PORT_H__
 #define __PPE_PORT_H__
 
+#include <linux/compiler.h>
+#include <linux/phy.h>
 #include <linux/phylink.h>
 
-struct ethtool_eee;
+struct clk;
+struct device_node;
+struct net_device;
+struct reset_control;
 struct rtnl_link_stats64;
+
+struct ppe_device;
 
 /**
  * enum ppe_port_clk_rst_type - PPE port clock and reset ID type
@@ -37,14 +44,14 @@ enum ppe_mac_type {
 
 /**
  * struct ppe_port - Private data for each PPE port
- * @phylink: Linux phylink instance
- * @phylink_config: Linux phylink configurations
- * @pcs: Linux phylink PCS instance
  * @np: Port device tree node
  * @ppe_dev: Back pointer to PPE device private data
  * @interface: Port interface mode
  * @mac_type: Port MAC type, GMAC or XGMAC
  * @port_id: Port ID
+ * @phylink: Linux phylink instance
+ * @phylink_config: Linux phylink configurations
+ * @pcs: Linux phylink PCS instance
  * @clks: Port clocks
  * @rstcs: Port resets
  * @gmib_read: Delay work task for GMAC MIB statistics polling function
@@ -52,14 +59,14 @@ enum ppe_mac_type {
  * @gmib_stats_lock: Lock to protect GMAC MIB statistics
  */
 struct ppe_port {
-	struct phylink *phylink;
-	struct phylink_config phylink_config;
-	struct phylink_pcs *pcs;
 	struct device_node *np;
 	struct ppe_device *ppe_dev;
 	phy_interface_t interface;
 	enum ppe_mac_type mac_type;
 	int port_id;
+	struct phylink *phylink;
+	struct phylink_config phylink_config;
+	struct phylink_pcs *pcs;
 	struct clk *clks[PPE_PORT_CLK_RST_MAX];
 	struct reset_control *rstcs[PPE_PORT_CLK_RST_MAX];
 	struct delayed_work gmib_read;
@@ -88,6 +95,5 @@ void ppe_port_get_ethtool_stats(struct ppe_port *ppe_port, u64 *data);
 void ppe_port_get_stats64(struct ppe_port *ppe_port,
 			  struct rtnl_link_stats64 *s);
 int ppe_port_set_mac_address(struct ppe_port *ppe_port, const u8 *addr);
-int ppe_port_set_mac_eee(struct ppe_port *ppe_port, struct ethtool_eee *eee);
 int ppe_port_set_maxframe(struct ppe_port *ppe_port, int maxframe_size);
 #endif

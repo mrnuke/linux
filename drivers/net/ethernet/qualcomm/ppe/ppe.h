@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __PPE_H__
@@ -13,13 +13,15 @@ struct device;
 struct regmap;
 struct dentry;
 
+struct ppe_ports;
+
 /**
  * struct ppe_device - PPE device private data.
  * @dev: PPE device structure.
  * @regmap: PPE register map.
  * @clk_rate: PPE clock rate.
  * @num_ports: Number of PPE ports.
- * @debugfs_root: PPE debug root entry.
+ * @debugfs_root: Debugfs root entry.
  * @ports: PPE MAC ports.
  * @num_icc_paths: Number of interconnect paths.
  * @icc_paths: Interconnect path array.

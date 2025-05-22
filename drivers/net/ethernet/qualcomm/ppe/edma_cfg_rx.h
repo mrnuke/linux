@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_CFG_RX__
@@ -28,6 +28,7 @@
 
 /* Rx AC flow control default threshold */
 #define EDMA_RX_AC_FC_THRES_DEF		0x104
+
 /* Rx mitigation timer's default value in microseconds */
 #define EDMA_RX_MITIGATION_TIMER_DEF	25
 

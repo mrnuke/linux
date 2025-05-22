@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_MAIN__
 #define __EDMA_MAIN__
 
-#include "ppe_api.h"
 #include "edma_rx.h"
 #include "edma_tx.h"
+#include "ppe_api.h"
 
 /* One clock cycle = 1/(EDMA clock frequency in Mhz) micro seconds.
  *
@@ -113,7 +113,7 @@ struct edma_intr_info {
 /**
  * struct edma_context - EDMA context.
  * @netdev_arr: Net device for each EDMA port
- * @dummy_dev: Dummy netdevice for RX DMA
+ * @dummy_dev: Dummy netdevice for Rx DMA
  * @ppe_dev: PPE device
  * @hw_info: EDMA Hardware info
  * @intr_info: EDMA Interrupt info
@@ -144,7 +144,7 @@ struct edma_context {
 	bool tx_requeue_stop;
 };
 
-/* Global EDMA context */
+/* Global EDMA context. */
 extern struct edma_context *edma_ctx;
 
 int edma_err_stats_alloc(void);

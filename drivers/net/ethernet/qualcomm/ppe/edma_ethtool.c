@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* ethtool support for EDMA */
@@ -242,33 +242,6 @@ static int edma_set_pauseparam(struct net_device *netdev,
 	return phylink_ethtool_set_pauseparam(port->phylink, pause);
 }
 
-static int edma_get_eee(struct net_device *netdev, struct ethtool_eee *eee)
-{
-	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
-	struct ppe_port *port =  port_priv->ppe_port;
-
-	if (!port_priv)
-		return -EINVAL;
-
-	return phylink_ethtool_get_eee(port->phylink, eee);
-}
-
-static int edma_set_eee(struct net_device *netdev, struct ethtool_eee *eee)
-{
-	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
-	struct ppe_port *port =  port_priv->ppe_port;
-	int ret;
-
-	if (!port_priv)
-		return -EINVAL;
-
-	ret = ppe_port_set_mac_eee(port_priv->ppe_port, eee);
-	if (ret)
-		return ret;
-
-	return phylink_ethtool_set_eee(port->phylink, eee);
-}
-
 static const struct ethtool_ops edma_ethtool_ops = {
 	.get_strings = &edma_get_strings,
 	.get_sset_count = &edma_get_strset_count,
@@ -278,8 +251,6 @@ static const struct ethtool_ops edma_ethtool_ops = {
 	.set_link_ksettings = edma_set_link_ksettings,
 	.get_pauseparam = &edma_get_pauseparam,
 	.set_pauseparam = &edma_set_pauseparam,
-	.get_eee = &edma_get_eee,
-	.set_eee = &edma_set_eee,
 };
 
 /**

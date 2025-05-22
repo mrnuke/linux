@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "ppe.h"
@@ -8,26 +8,29 @@
 #include "ppe_config.h"
 
 /**
- * ppe_queue_priority_set - set scheduler priority of PPE hardware queue
+ * ppe_queue_node_priority_set - set scheduler priority of PPE queue or flow
  * @ppe_dev: PPE device
- * @node_id: PPE hardware node ID, which is either queue ID or flow ID
- * @priority: Qos scheduler priority
+ * @node_id: PPE hardware node ID, which can be queue ID or flow ID.
+ * @priority: PPE discipline scheduler priority
  *
- * Configure scheduler priority of PPE hardware queque, the maximum node
- * ID supported is PPE_QUEUE_ID_NUM added by PPE_FLOW_ID_NUM, queue ID
- * belongs to level 0, flow ID belongs to level 1 in the packet pipeline.
+ * Configure scheduler priority for a given PPE node. Node may be of type
+ * PPE queue or flow. The packet is dispatched first by queue scheduler
+ * (level 0), then dispatched by flow scheduler (level 1).
  *
  * Return 0 on success, negative error code on failure.
  */
-int ppe_queue_priority_set(struct ppe_device *ppe_dev,
-			   int node_id, int priority)
+int ppe_queue_node_priority_set(struct ppe_device *ppe_dev,
+				int node_id, int priority)
 {
-	struct ppe_qos_scheduler_cfg sch_cfg;
+	struct ppe_scheduler_cfg sch_cfg;
 	int ret, port, level = 0;
 
-	if (node_id >= PPE_QUEUE_ID_NUM) {
+	if (node_id >= PPE_QUEUE_ID_MAX + PPE_FLOW_ID_MAX)
+		return -EINVAL;
+
+	if (node_id >= PPE_QUEUE_ID_MAX) {
 		level = 1;
-		node_id -= PPE_QUEUE_ID_NUM;
+		node_id -= PPE_QUEUE_ID_MAX;
 	}
 
 	ret = ppe_queue_scheduler_get(ppe_dev, node_id, level, &port, &sch_cfg);
@@ -42,25 +45,26 @@ int ppe_queue_priority_set(struct ppe_device *ppe_dev,
 /**
  * ppe_edma_queue_offset_config - Configure queue offset for EDMA interface
  * @ppe_dev: PPE device
- * @class: The class to configure queue offset
- * @index: Class index, internal priority or hash value
- * @queue_offset: Queue offset value
+ * @type: The type can be internal priority or PPE hash
+ * @index: Class index, which can be internal priority or hash value
+ * @queue_offset: Queue offset value which is added by the queue base to get
+ * 		  the egress queue ID.
  *
  * PPE EDMA queue offset is configured based on the PPE internal priority or
- * RSS hash value, the profile ID is fixed to 0 for EDMA interface.
+ * RSS hash value, the profile ID is fixed to 0 for the EDMA interface.
  *
  * Return 0 on success, negative error code on failure.
  */
 int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
-				 enum ppe_queue_class_type class,
+				 enum ppe_queue_offset_type type,
 				 int index, int queue_offset)
 {
-	if (class == PPE_QUEUE_CLASS_PRIORITY)
-		return ppe_queue_ucast_pri_class_set(ppe_dev, 0,
-						     index, queue_offset);
+	if (type == PPE_QUEUE_OFFSET_BY_PRIORITY)
+		return ppe_queue_ucast_offset_pri_set(ppe_dev, 0,
+						      index, queue_offset);
 
-	return ppe_queue_ucast_hash_class_set(ppe_dev, 0,
-					      index, queue_offset);
+	return ppe_queue_ucast_offset_hash_set(ppe_dev, 0,
+					       index, queue_offset);
 }
 
 /**
@@ -74,7 +78,8 @@ int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
  *
  * Return 0 on success, negative error code on failure.
  */
-int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
+int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev,
+				enum ppe_resource_type type,
 				int *res_start, int *res_end)
 {
 	if (type != PPE_RES_UCAST && type != PPE_RES_MCAST)
@@ -84,20 +89,21 @@ int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
 };
 
 /**
- * ppe_edma_ring_to_queues_config - Map EDMA ring to PPE queues
+ * ppe_edma_ring_to_queues_config - Configure EDMA ring to queue mapping in PPE
  * @ppe_dev: PPE device
  * @ring_id: EDMA ring ID
  * @num: Number of queues mapped to EDMA ring
  * @queues: PPE queue IDs
  *
- * PPE queues are configured to map with the special EDMA ring ID.
+ * Enable EDMA ring to PPE queue mapping configuration for packet
+ * receive to an EDMA ring.
  *
  * Return 0 on success, negative error code on failure.
  */
 int ppe_edma_ring_to_queues_config(struct ppe_device *ppe_dev, int ring_id,
-				   int num, int queues[] __counted_by(num))
+				   int num, int queues[])
 {
-	u32 queue_bmap[PPE_RING_MAPPED_BP_QUEUE_WORD_COUNT] = {};
+	u32 queue_bmap[PPE_RING_TO_QUEUE_BITMAP_WORD_CNT] = {};
 	int index;
 
 	for (index = 0; index < num; index++)

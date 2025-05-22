@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* PPE debugfs routines for display of PPE counters useful for debug. */
 
+#include <linux/bitfield.h>
 #include <linux/debugfs.h>
+#include <linux/dev_printk.h>
 #include <linux/netdevice.h>
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
@@ -16,30 +18,19 @@
 #include "ppe_debugfs.h"
 #include "ppe_regs.h"
 
-#define PPE_PKT_CNT_TBL_SIZE		3
-#define PPE_DROP_PKT_CNT_TBL_SIZE	5
+#define PPE_PKT_CNT_TBL_SIZE				3
+#define PPE_DROP_PKT_CNT_TBL_SIZE			5
 
-#define PREFIX_S(desc, cnt_type) \
-	seq_printf(seq, "%-16s %16s", desc, cnt_type)
-#define CNT_ONE_TYPE(cnt, str, index) \
-	seq_printf(seq, "%10u(%s=%04d)", cnt, str, index)
-#define CNT_TWO_TYPE(cnt, cnt1, str, index) \
-	seq_printf(seq, "%10u/%u(%s=%04d)", cnt, cnt1, str, index)
-#define CNT_CPU_CODE(cnt, index) \
-	seq_printf(seq, "%10u(cpucode:%d)", cnt, index)
-#define CNT_DROP_CODE(cnt, port, index) \
-	seq_printf(seq, "%10u(port=%d),dropcode:%d", cnt, port, index)
+#define PPE_W0_PKT_CNT					GENMASK(31, 0)
+#define PPE_W2_DROP_PKT_CNT_LOW				GENMASK(31, 8)
+#define PPE_W3_DROP_PKT_CNT_HIGH			GENMASK(7, 0)
 
-#define PPE_W0_PKT_CNT				GENMASK(31, 0)
-#define PPE_W2_DROP_PKT_CNT_LOW			GENMASK(31, 8)
-#define PPE_W3_DROP_PKT_CNT_HIGH		GENMASK(7, 0)
-
-#define PPE_GET_PKT_CNT(tbl_cfg)		\
-	u32_get_bits(*((u32 *)(tbl_cfg)), PPE_W0_PKT_CNT)
-#define PPE_GET_DROP_PKT_CNT_LOW(tbl_cfg)	\
-	u32_get_bits(*((u32 *)(tbl_cfg) + 0x2), PPE_W2_DROP_PKT_CNT_LOW)
-#define PPE_GET_DROP_PKT_CNT_HIGH(tbl_cfg)	\
-	u32_get_bits(*((u32 *)(tbl_cfg) + 0x3), PPE_W3_DROP_PKT_CNT_HIGH)
+#define PPE_GET_PKT_CNT(tbl_cnt)			\
+	FIELD_GET(PPE_W0_PKT_CNT, *(tbl_cnt))
+#define PPE_GET_DROP_PKT_CNT_LOW(tbl_cnt)		\
+	FIELD_GET(PPE_W2_DROP_PKT_CNT_LOW, *(tbl_cnt + 0x2))
+#define PPE_GET_DROP_PKT_CNT_HIGH(tbl_cnt)		\
+	FIELD_GET(PPE_W3_DROP_PKT_CNT_HIGH, *(tbl_cnt + 0x3))
 
 /**
  * enum ppe_cnt_size_type - PPE counter size type
@@ -47,16 +38,94 @@
  * @PPE_PKT_CNT_SIZE_3WORD: Counter size with table of 3 words
  * @PPE_PKT_CNT_SIZE_5WORD: Counter size with table of 5 words
  *
- * PPE takes the different register size to record the packet counter,
- * which uses single register or register table with 3 words or 5 words.
+ * PPE takes the different register size to record the packet counters.
+ * It uses single register, or register table with 3 words or 5 words.
  * The counter with table size 5 words also records the drop counter.
- * There are also some other counters only occupying several bits less than
- * 32 bits, which is not covered by this enumeration type.
+ * There are also some other counter types occupying sizes less than 32
+ * bits, which is not covered by this enumeration type.
  */
 enum ppe_cnt_size_type {
 	PPE_PKT_CNT_SIZE_1WORD,
 	PPE_PKT_CNT_SIZE_3WORD,
 	PPE_PKT_CNT_SIZE_5WORD,
+};
+
+/**
+ * enum ppe_cnt_type - PPE counter type.
+ * @PPE_CNT_BM: Packet counter processed by BM.
+ * @PPE_CNT_PARSE: Packet counter parsed on ingress.
+ * @PPE_CNT_PORT_RX: Packet counter on the ingress port.
+ * @PPE_CNT_VLAN_RX: VLAN packet counter received.
+ * @PPE_CNT_L2_FWD: Packet counter processed by L2 forwarding.
+ * @PPE_CNT_CPU_CODE: Packet counter marked with various CPU codes.
+ * @PPE_CNT_VLAN_TX: VLAN packet counter transmitted.
+ * @PPE_CNT_PORT_TX: Packet counter on the egress port.
+ * @PPE_CNT_QM: Packet counter processed by QM.
+ */
+enum ppe_cnt_type {
+	PPE_CNT_BM,
+	PPE_CNT_PARSE,
+	PPE_CNT_PORT_RX,
+	PPE_CNT_VLAN_RX,
+	PPE_CNT_L2_FWD,
+	PPE_CNT_CPU_CODE,
+	PPE_CNT_VLAN_TX,
+	PPE_CNT_PORT_TX,
+	PPE_CNT_QM,
+};
+
+/**
+ * struct ppe_debugfs_entry - PPE debugfs entry.
+ * @name: Debugfs file name.
+ * @counter_type: PPE packet counter type.
+ * @ppe: PPE device.
+ *
+ * The PPE debugfs entry is used to create the debugfs file and passed
+ * to debugfs_create_file() as private data.
+ */
+struct ppe_debugfs_entry {
+	const char *name;
+	enum ppe_cnt_type counter_type;
+	struct ppe_device *ppe;
+};
+
+static const struct ppe_debugfs_entry debugfs_files[] = {
+	{
+		.name			= "bm",
+		.counter_type		= PPE_CNT_BM,
+	},
+	{
+		.name			= "parse",
+		.counter_type		= PPE_CNT_PARSE,
+	},
+	{
+		.name			= "port_rx",
+		.counter_type		= PPE_CNT_PORT_RX,
+	},
+	{
+		.name			= "vlan_rx",
+		.counter_type		= PPE_CNT_VLAN_RX,
+	},
+	{
+		.name			= "l2_forward",
+		.counter_type		= PPE_CNT_L2_FWD,
+	},
+	{
+		.name			= "cpu_code",
+		.counter_type		= PPE_CNT_CPU_CODE,
+	},
+	{
+		.name			= "vlan_tx",
+		.counter_type		= PPE_CNT_VLAN_TX,
+	},
+	{
+		.name			= "port_tx",
+		.counter_type		= PPE_CNT_PORT_TX,
+	},
+	{
+		.name			= "qm",
+		.counter_type		= PPE_CNT_QM,
+	},
 };
 
 static int ppe_pkt_cnt_get(struct ppe_device *ppe_dev, u32 reg,
@@ -126,600 +195,617 @@ static void ppe_tbl_pkt_cnt_clear(struct ppe_device *ppe_dev, u32 reg,
 	}
 }
 
-/* The number of packets dropped because of no buffer available. */
-static void ppe_prx_drop_counter_get(struct ppe_device *ppe_dev,
-				     struct seq_file *seq)
+static int ppe_bm_counter_get(struct ppe_device *ppe_dev, struct seq_file *seq)
 {
-	int ret, i, tag = 0;
-	u32 reg, drop_cnt;
+	u32 reg, val, pkt_cnt, pkt_cnt1;
+	int ret, i, tag;
 
-	PREFIX_S("PRX_DROP_CNT", "SILENT_DROP:");
-	for (i = 0; i < PPE_DROP_CNT_NUM; i++) {
-		reg = PPE_DROP_CNT_ADDR + i * PPE_DROP_CNT_INC;
+	seq_printf(seq, "%-24s", "BM SILENT_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_DROP_CNT_TBL_ENTRIES; i++) {
+		reg = PPE_DROP_CNT_TBL_ADDR + i * PPE_DROP_CNT_TBL_INC;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD,
-				      &drop_cnt, NULL);
+				      &pkt_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
-		if (drop_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+		if (pkt_cnt > 0) {
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_ONE_TYPE(drop_cnt, "port", i);
+			seq_printf(seq, "%10u(%s=%04d)", pkt_cnt, "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
-}
 
-/* The number of packet dropped because of no enough buffer to cache
- * packet, some buffer allocated for the part of packet.
- */
-static void ppe_prx_bm_drop_counter_get(struct ppe_device *ppe_dev,
-					struct seq_file *seq)
-{
-	u32 reg, pkt_cnt = 0;
-	int ret, i, tag = 0;
-
-	PREFIX_S("PRX_BM_DROP_CNT", "OVERFLOW_DROP:");
-	for (i = 0; i < PPE_DROP_STAT_NUM; i++) {
-		reg = PPE_DROP_STAT_ADDR + PPE_DROP_STAT_INC * i;
+	/* The number of packets dropped because hardware buffers were
+	 * available only partially for the packet.
+	 */
+	seq_printf(seq, "%-24s", "BM OVERFLOW_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_DROP_STAT_TBL_ENTRIES; i++) {
+		reg = PPE_DROP_STAT_TBL_ADDR + PPE_DROP_STAT_TBL_INC * i;
 
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
 				      &pkt_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_ONE_TYPE(pkt_cnt, "port", i);
+			seq_printf(seq, "%10u(%s=%04d)", pkt_cnt, "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
-}
 
-/* The number of currently occupied buffers, that can't be flushed. */
-static void ppe_prx_bm_port_counter_get(struct ppe_device *ppe_dev,
-					struct seq_file *seq)
-{
-	int used_cnt, react_cnt;
-	int ret, i, tag = 0;
-	u32 reg, val;
-
-	PREFIX_S("PRX_BM_PORT_CNT", "USED/REACT:");
-	for (i = 0; i < PPE_BM_USED_CNT_NUM; i++) {
-		reg = PPE_BM_USED_CNT_ADDR + i * PPE_BM_USED_CNT_INC;
+	/* The number of currently occupied buffers, that can't be flushed. */
+	seq_printf(seq, "%-24s", "BM USED/REACT:");
+	tag = 0;
+	for (i = 0; i < PPE_BM_USED_CNT_TBL_ENTRIES; i++) {
+		reg = PPE_BM_USED_CNT_TBL_ADDR + i * PPE_BM_USED_CNT_TBL_INC;
 		ret = regmap_read(ppe_dev->regmap, reg, &val);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
-		used_cnt = FIELD_GET(PPE_BM_USED_CNT_VAL, val);
+		/* The number of PPE buffers used for caching the received
+		 * packets before the pause frame sent.
+		 */
+		pkt_cnt = FIELD_GET(PPE_BM_USED_CNT_VAL, val);
 
-		reg = PPE_BM_REACT_CNT_ADDR + i * PPE_BM_REACT_CNT_INC;
+		reg = PPE_BM_REACT_CNT_TBL_ADDR + i * PPE_BM_REACT_CNT_TBL_INC;
 		ret = regmap_read(ppe_dev->regmap, reg, &val);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
-		react_cnt = FIELD_GET(PPE_BM_REACT_CNT_VAL, val);
+		/* The number of PPE buffers used for caching the received
+		 * packets after pause frame sent out.
+		 */
+		pkt_cnt1 = FIELD_GET(PPE_BM_REACT_CNT_VAL, val);
 
-		if (used_cnt > 0 || react_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+		if (pkt_cnt > 0 || pkt_cnt1 > 0) {
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_TWO_TYPE(used_cnt, react_cnt, "port", i);
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, pkt_cnt1,
+				   "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of ingress packets. */
-static void ppe_ipx_pkt_counter_get(struct ppe_device *ppe_dev,
-				    struct seq_file *seq)
+/* The number of packets processed by the ingress parser module of PPE. */
+static int ppe_parse_pkt_counter_get(struct ppe_device *ppe_dev,
+				     struct seq_file *seq)
 {
-	u32 reg, cnt, tunnel_cnt;
+	u32 reg, cnt = 0, tunnel_cnt = 0;
 	int i, ret, tag = 0;
 
-	PREFIX_S("IPR_PKT_CNT", "TPRX/IPRX:");
-	for (i = 0; i < PPE_IPR_PKT_CNT_NUM; i++) {
-		reg = PPE_TPR_PKT_CNT_ADDR + i * PPE_IPR_PKT_CNT_INC;
+	seq_printf(seq, "%-24s", "PARSE TPRX/IPRX:");
+	for (i = 0; i < PPE_IPR_PKT_CNT_TBL_ENTRIES; i++) {
+		reg = PPE_TPR_PKT_CNT_TBL_ADDR + i * PPE_TPR_PKT_CNT_TBL_INC;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD,
 				      &tunnel_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
-		reg = PPE_IPR_PKT_CNT_ADDR + i * PPE_IPR_PKT_CNT_INC;
+		reg = PPE_IPR_PKT_CNT_TBL_ADDR + i * PPE_IPR_PKT_CNT_TBL_INC;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD,
 				      &cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (tunnel_cnt > 0 || cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_TWO_TYPE(tunnel_cnt, cnt, "port", i);
+			seq_printf(seq, "%10u/%u(%s=%04d)", tunnel_cnt, cnt,
+				   "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of packet received or dropped on the ingress direction. */
-static void ppe_port_rx_counter_get(struct ppe_device *ppe_dev,
-				    struct seq_file *seq)
+/* The number of packets received or dropped on the ingress port. */
+static int ppe_port_rx_counter_get(struct ppe_device *ppe_dev,
+				   struct seq_file *seq)
 {
-	u32 reg, pkt_cnt, drop_cnt;
-	int ret, i, tag = 0;
+	u32 reg, pkt_cnt = 0, drop_cnt = 0;
+	int ret, i, tag;
 
-	PREFIX_S("PORT_RX_CNT", "RX/RX_DROP:");
-	for (i = 0; i < PPE_PHY_PORT_RX_CNT_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "PORT RX/RX_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_PHY_PORT_RX_CNT_TBL_ENTRIES; i++) {
 		reg = PPE_PHY_PORT_RX_CNT_TBL_ADDR + PPE_PHY_PORT_RX_CNT_TBL_INC * i;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD,
 				      &pkt_cnt, &drop_cnt);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_TWO_TYPE(pkt_cnt, drop_cnt, "port", i);
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, drop_cnt,
+				   "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
-}
 
-/* The number of packet received or dropped by the port. */
-static void ppe_vp_rx_counter_get(struct ppe_device *ppe_dev,
-				  struct seq_file *seq)
-{
-	u32 reg, pkt_cnt, drop_cnt;
-	int ret, i, tag = 0;
-
-	PREFIX_S("VPORT_RX_CNT", "RX/RX_DROP:");
-	for (i = 0; i < PPE_PORT_RX_CNT_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "VPORT RX/RX_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_PORT_RX_CNT_TBL_ENTRIES; i++) {
 		reg = PPE_PORT_RX_CNT_TBL_ADDR + PPE_PORT_RX_CNT_TBL_INC * i;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD,
 				      &pkt_cnt, &drop_cnt);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_TWO_TYPE(pkt_cnt, drop_cnt, "port", i);
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, drop_cnt,
+				   "port", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of packet received or dropped by layer 2 processing. */
-static void ppe_pre_l2_counter_get(struct ppe_device *ppe_dev,
-				   struct seq_file *seq)
+/* The number of packets received or dropped by layer 2 processing. */
+static int ppe_l2_counter_get(struct ppe_device *ppe_dev,
+			      struct seq_file *seq)
 {
-	u32 reg, pkt_cnt, drop_cnt;
+	u32 reg, pkt_cnt = 0, drop_cnt = 0;
 	int ret, i, tag = 0;
 
-	PREFIX_S("PRE_L2_CNT", "RX/RX_DROP:");
-	for (i = 0; i < PPE_PRE_L2_CNT_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "L2 RX/RX_DROP:");
+	for (i = 0; i < PPE_PRE_L2_CNT_TBL_ENTRIES; i++) {
 		reg = PPE_PRE_L2_CNT_TBL_ADDR + PPE_PRE_L2_CNT_TBL_INC * i;
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD,
 				      &pkt_cnt, &drop_cnt);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_TWO_TYPE(pkt_cnt, drop_cnt, "vsi", i);
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, drop_cnt,
+				   "vsi", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of packet received for VLAN handler. */
-static void ppe_vlan_counter_get(struct ppe_device *ppe_dev,
-				 struct seq_file *seq)
+/* The number of VLAN packets received by PPE. */
+static int ppe_vlan_rx_counter_get(struct ppe_device *ppe_dev,
+				   struct seq_file *seq)
 {
 	u32 reg, pkt_cnt = 0;
 	int ret, i, tag = 0;
 
-	PREFIX_S("VLAN_CNT", "RX:");
-	for (i = 0; i < PPE_VLAN_CNT_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "VLAN RX:");
+	for (i = 0; i < PPE_VLAN_CNT_TBL_ENTRIES; i++) {
 		reg = PPE_VLAN_CNT_TBL_ADDR + PPE_VLAN_CNT_TBL_INC * i;
 
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
 				      &pkt_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_ONE_TYPE(pkt_cnt, "vsi", i);
+			seq_printf(seq, "%10u(%s=%04d)", pkt_cnt, "vsi", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of packet forwarded to CPU handler. */
-static void ppe_cpu_code_counter_get(struct ppe_device *ppe_dev,
-				     struct seq_file *seq)
+/* The number of packets handed to CPU by PPE. */
+static int ppe_cpu_code_counter_get(struct ppe_device *ppe_dev,
+				    struct seq_file *seq)
 {
 	u32 reg, pkt_cnt = 0;
 	int ret, i;
 
-	PREFIX_S("CPU_CODE_CNT", "CODE:");
-	for (i = 0; i < PPE_DROP_CPU_CNT_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "CPU CODE:");
+	for (i = 0; i < PPE_DROP_CPU_CNT_TBL_ENTRIES; i++) {
 		reg = PPE_DROP_CPU_CNT_TBL_ADDR + PPE_DROP_CPU_CNT_TBL_INC * i;
 
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
 				      &pkt_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (!pkt_cnt)
 			continue;
 
+		/* There are 256 CPU codes saved in the first 256 entries
+		 * of register table, and 128 drop codes for each PPE port
+		 * (0-7), the total entries is 256 + 8 * 128.
+		 */
 		if (i < 256)
-			CNT_CPU_CODE(pkt_cnt, i);
+			seq_printf(seq, "%10u(cpucode:%d)", pkt_cnt, i);
 		else
-			CNT_DROP_CODE(pkt_cnt, (i - 256) % 8, (i - 256) / 8);
-
+			seq_printf(seq, "%10u(port=%d),dropcode:%d", pkt_cnt,
+				   (i - 256) % 8, (i - 256) / 8);
 		seq_putc(seq, '\n');
-		PREFIX_S("", "");
+		seq_printf(seq, "%-24s", "");
 	}
 
 	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-/* The number of packet forwarded by VLAN on the egress direction. */
-static void ppe_eg_vsi_counter_get(struct ppe_device *ppe_dev,
+/* The number of packets forwarded by VLAN on the egress direction. */
+static int ppe_vlan_tx_counter_get(struct ppe_device *ppe_dev,
 				   struct seq_file *seq)
 {
 	u32 reg, pkt_cnt = 0;
 	int ret, i, tag = 0;
 
-	PREFIX_S("EG_VSI_CNT", "TX:");
-	for (i = 0; i < PPE_EG_VSI_COUNTER_TBL_NUM; i++) {
+	seq_printf(seq, "%-24s", "VLAN TX:");
+	for (i = 0; i < PPE_EG_VSI_COUNTER_TBL_ENTRIES; i++) {
 		reg = PPE_EG_VSI_COUNTER_TBL_ADDR + PPE_EG_VSI_COUNTER_TBL_INC * i;
 
 		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
 				      &pkt_cnt, NULL);
 		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
 		}
 
 		if (pkt_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
 
-			CNT_ONE_TYPE(pkt_cnt, "vsi", i);
+			seq_printf(seq, "%10u(%s=%04d)", pkt_cnt, "vsi", i);
 		}
 	}
 
 	seq_putc(seq, '\n');
-}
-
-/* The number of packet trasmitted or dropped by port. */
-static void ppe_vp_tx_counter_get(struct ppe_device *ppe_dev,
-				  struct seq_file *seq)
-{
-	u32 reg, pkt_cnt = 0, drop_cnt = 0;
-	int ret, i, tag = 0;
-
-	PREFIX_S("VPORT_TX_CNT", "TX/TX_DROP:");
-	for (i = 0; i < PPE_VPORT_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_VPORT_TX_COUNTER_TBL_ADDR + PPE_VPORT_TX_COUNTER_TBL_INC * i;
-		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
-				      &pkt_cnt, NULL);
-		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
-		}
-
-		reg = PPE_VPORT_TX_DROP_CNT_TBL_ADDR + PPE_VPORT_TX_DROP_CNT_TBL_INC * i;
-		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
-				      &drop_cnt, NULL);
-		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
-		}
-
-		if (pkt_cnt > 0 || drop_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
-
-			CNT_TWO_TYPE(pkt_cnt, drop_cnt, "port", i);
-		}
-	}
-
-	seq_putc(seq, '\n');
-}
-
-/* The number of packet trasmitted or dropped on the egress direction. */
-static void ppe_port_tx_counter_get(struct ppe_device *ppe_dev,
-				    struct seq_file *seq)
-{
-	u32 reg, pkt_cnt = 0, drop_cnt = 0;
-	int ret, i, tag = 0;
-
-	PREFIX_S("PORT_TX_CNT", "TX/TX_DROP:");
-	for (i = 0; i < PPE_PORT_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_PORT_TX_COUNTER_TBL_ADDR + PPE_PORT_TX_COUNTER_TBL_INC * i;
-		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
-				      &pkt_cnt, NULL);
-		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
-		}
-
-		reg = PPE_PORT_TX_DROP_CNT_TBL_ADDR + PPE_PORT_TX_DROP_CNT_TBL_INC * i;
-		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
-				      &drop_cnt, NULL);
-		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
-		}
-
-		if (pkt_cnt > 0 || drop_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
-
-			CNT_TWO_TYPE(pkt_cnt, drop_cnt, "port", i);
-		}
-	}
-
-	seq_putc(seq, '\n');
-}
-
-/* The number of packet trasmitted or pended by the PPE queue. */
-static void ppe_queue_tx_counter_get(struct ppe_device *ppe_dev,
-				     struct seq_file *seq)
-{
-	u32 reg, val, pkt_cnt = 0, pend_cnt = 0;
-	int ret, i, tag = 0;
-
-	PREFIX_S("QUEUE_TX_CNT", "TX/PEND:");
-	for (i = 0; i < PPE_QUEUE_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_QUEUE_TX_COUNTER_TBL_ADDR + PPE_QUEUE_TX_COUNTER_TBL_INC * i;
-		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
-				      &pkt_cnt, NULL);
-		if (ret) {
-			seq_printf(seq, "ERROR %d\n", ret);
-			return;
-		}
-
-		if (i < PPE_AC_UNI_QUEUE_CFG_TBL_NUM) {
-			reg = PPE_AC_UNI_QUEUE_CNT_TBL_ADDR + PPE_AC_UNI_QUEUE_CNT_TBL_INC * i;
-			ret = regmap_read(ppe_dev->regmap, reg, &val);
-			if (ret) {
-				seq_printf(seq, "ERROR %d\n", ret);
-				return;
-			}
-
-			pend_cnt = FIELD_GET(PPE_AC_UNI_QUEUE_CNT_TBL_PEND_CNT, val);
-		} else {
-			reg = PPE_AC_MUL_QUEUE_CNT_TBL_ADDR +
-			      PPE_AC_MUL_QUEUE_CNT_TBL_INC * (i - PPE_AC_UNI_QUEUE_CFG_TBL_NUM);
-			ret = regmap_read(ppe_dev->regmap, reg, &val);
-			if (ret) {
-				seq_printf(seq, "ERROR %d\n", ret);
-				return;
-			}
-
-			pend_cnt = FIELD_GET(PPE_AC_MUL_QUEUE_CNT_TBL_PEND_CNT, val);
-		}
-
-		if (pkt_cnt > 0 || pend_cnt > 0) {
-			tag++;
-			if (!(tag % 4)) {
-				seq_putc(seq, '\n');
-				PREFIX_S("", "");
-			}
-
-			CNT_TWO_TYPE(pkt_cnt, pend_cnt, "queue", i);
-		}
-	}
-
-	seq_putc(seq, '\n');
-}
-
-/* Display the packet counter of PPE. */
-static int ppe_packet_counter_show(struct seq_file *seq, void *v)
-{
-	struct ppe_device *ppe_dev = seq->private;
-
-	ppe_prx_drop_counter_get(ppe_dev, seq);
-	ppe_prx_bm_drop_counter_get(ppe_dev, seq);
-	ppe_prx_bm_port_counter_get(ppe_dev, seq);
-	ppe_ipx_pkt_counter_get(ppe_dev, seq);
-	ppe_port_rx_counter_get(ppe_dev, seq);
-	ppe_vp_rx_counter_get(ppe_dev, seq);
-	ppe_pre_l2_counter_get(ppe_dev, seq);
-	ppe_vlan_counter_get(ppe_dev, seq);
-	ppe_cpu_code_counter_get(ppe_dev, seq);
-	ppe_eg_vsi_counter_get(ppe_dev, seq);
-	ppe_vp_tx_counter_get(ppe_dev, seq);
-	ppe_port_tx_counter_get(ppe_dev, seq);
-	ppe_queue_tx_counter_get(ppe_dev, seq);
 
 	return 0;
 }
 
-static int ppe_packet_counter_open(struct inode *inode, struct file *file)
+/* The number of packets trasmitted or dropped on the egress port. */
+static int ppe_port_tx_counter_get(struct ppe_device *ppe_dev,
+				   struct seq_file *seq)
 {
-	return single_open(file, ppe_packet_counter_show, inode->i_private);
+	u32 reg, pkt_cnt = 0, drop_cnt = 0;
+	int ret, i, tag;
+
+	seq_printf(seq, "%-24s", "VPORT TX/TX_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_VPORT_TX_COUNTER_TBL_ENTRIES; i++) {
+		reg = PPE_VPORT_TX_COUNTER_TBL_ADDR + PPE_VPORT_TX_COUNTER_TBL_INC * i;
+		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
+				      &pkt_cnt, NULL);
+		if (ret) {
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
+		}
+
+		reg = PPE_VPORT_TX_DROP_CNT_TBL_ADDR + PPE_VPORT_TX_DROP_CNT_TBL_INC * i;
+		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
+				      &drop_cnt, NULL);
+		if (ret) {
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
+		}
+
+		if (pkt_cnt > 0 || drop_cnt > 0) {
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
+
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, drop_cnt,
+				   "port", i);
+		}
+	}
+
+	seq_putc(seq, '\n');
+
+	seq_printf(seq, "%-24s", "PORT TX/TX_DROP:");
+	tag = 0;
+	for (i = 0; i < PPE_PORT_TX_COUNTER_TBL_ENTRIES; i++) {
+		reg = PPE_PORT_TX_COUNTER_TBL_ADDR + PPE_PORT_TX_COUNTER_TBL_INC * i;
+		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
+				      &pkt_cnt, NULL);
+		if (ret) {
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
+		}
+
+		reg = PPE_PORT_TX_DROP_CNT_TBL_ADDR + PPE_PORT_TX_DROP_CNT_TBL_INC * i;
+		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
+				      &drop_cnt, NULL);
+		if (ret) {
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
+		}
+
+		if (pkt_cnt > 0 || drop_cnt > 0) {
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
+
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, drop_cnt,
+				   "port", i);
+		}
+	}
+
+	seq_putc(seq, '\n');
+
+	return 0;
 }
 
-static ssize_t ppe_packet_counter_clear(struct file *file,
+/* The number of packets transmitted or pending by the PPE queue. */
+static int ppe_queue_counter_get(struct ppe_device *ppe_dev,
+				 struct seq_file *seq)
+{
+	u32 reg, val, pkt_cnt = 0, pend_cnt = 0;
+	int ret, i, tag = 0;
+
+	seq_printf(seq, "%-24s", "QUEUE TX/PEND:");
+	for (i = 0; i < PPE_QUEUE_TX_COUNTER_TBL_ENTRIES; i++) {
+		reg = PPE_QUEUE_TX_COUNTER_TBL_ADDR + PPE_QUEUE_TX_COUNTER_TBL_INC * i;
+		ret = ppe_pkt_cnt_get(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD,
+				      &pkt_cnt, NULL);
+		if (ret) {
+			dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+			return ret;
+		}
+
+		if (i < PPE_AC_UNICAST_QUEUE_CFG_TBL_ENTRIES) {
+			reg = PPE_AC_UNICAST_QUEUE_CNT_TBL_ADDR +
+			      PPE_AC_UNICAST_QUEUE_CNT_TBL_INC * i;
+			ret = regmap_read(ppe_dev->regmap, reg, &val);
+			if (ret) {
+				dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+				return ret;
+			}
+
+			pend_cnt = FIELD_GET(PPE_AC_UNICAST_QUEUE_CNT_TBL_PEND_CNT, val);
+		} else {
+			reg = PPE_AC_MULTICAST_QUEUE_CNT_TBL_ADDR +
+			      PPE_AC_MULTICAST_QUEUE_CNT_TBL_INC *
+			      (i - PPE_AC_UNICAST_QUEUE_CFG_TBL_ENTRIES);
+			ret = regmap_read(ppe_dev->regmap, reg, &val);
+			if (ret) {
+				dev_err(ppe_dev->dev, "ERROR) %d\n", ret);
+				return ret;
+			}
+
+			pend_cnt = FIELD_GET(PPE_AC_MULTICAST_QUEUE_CNT_TBL_PEND_CNT, val);
+		}
+
+		if (pkt_cnt > 0 || pend_cnt > 0) {
+			if (!((++tag) % 4))
+				seq_printf(seq, "\n%-24s", "");
+
+			seq_printf(seq, "%10u/%u(%s=%04d)", pkt_cnt, pend_cnt, "queue", i);
+		}
+	}
+
+	seq_putc(seq, '\n');
+
+	return 0;
+}
+
+/* Display the various packet counters of PPE. */
+static int ppe_packet_counter_show(struct seq_file *seq, void *v)
+{
+	struct ppe_debugfs_entry *entry = seq->private;
+	struct ppe_device *ppe_dev = entry->ppe;
+	int ret;
+
+	switch (entry->counter_type) {
+	case PPE_CNT_BM:
+		ret = ppe_bm_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_PARSE:
+		ret = ppe_parse_pkt_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_PORT_RX:
+		ret = ppe_port_rx_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_VLAN_RX:
+		ret = ppe_vlan_rx_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_L2_FWD:
+		ret = ppe_l2_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_CPU_CODE:
+		ret = ppe_cpu_code_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_VLAN_TX:
+		ret = ppe_vlan_tx_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_PORT_TX:
+		ret = ppe_port_tx_counter_get(ppe_dev, seq);
+		break;
+	case PPE_CNT_QM:
+		ret = ppe_queue_counter_get(ppe_dev, seq);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+/* Flush the various packet counters of PPE. */
+static ssize_t ppe_packet_counter_write(struct file *file,
 					const char __user *buf,
 					size_t count, loff_t *pos)
 {
-	struct ppe_device *ppe_dev = file_inode(file)->i_private;
+	struct ppe_debugfs_entry *entry = file_inode(file)->i_private;
+	struct ppe_device *ppe_dev = entry->ppe;
 	u32 reg;
 	int i;
 
-	for (i = 0; i < PPE_DROP_CNT_NUM; i++) {
-		reg = PPE_DROP_CNT_ADDR + i * PPE_DROP_CNT_INC;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
-	}
+	switch (entry->counter_type) {
+	case PPE_CNT_BM:
+		for (i = 0; i < PPE_DROP_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_DROP_CNT_TBL_ADDR + i * PPE_DROP_CNT_TBL_INC;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
+		}
 
-	for (i = 0; i < PPE_DROP_STAT_NUM; i++) {
-		reg = PPE_DROP_STAT_ADDR + PPE_DROP_STAT_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+		for (i = 0; i < PPE_DROP_STAT_TBL_ENTRIES; i++) {
+			reg = PPE_DROP_STAT_TBL_ADDR + PPE_DROP_STAT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-	for (i = 0; i < PPE_IPR_PKT_CNT_NUM; i++) {
-		reg = PPE_IPR_PKT_CNT_ADDR + i * PPE_IPR_PKT_CNT_INC;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
+		break;
+	case PPE_CNT_PARSE:
+		for (i = 0; i < PPE_IPR_PKT_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_IPR_PKT_CNT_TBL_ADDR + i * PPE_IPR_PKT_CNT_TBL_INC;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
 
-		reg = PPE_TPR_PKT_CNT_ADDR + i * PPE_IPR_PKT_CNT_INC;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
-	}
+			reg = PPE_TPR_PKT_CNT_TBL_ADDR + i * PPE_TPR_PKT_CNT_TBL_INC;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_1WORD);
+		}
 
-	for (i = 0; i < PPE_VLAN_CNT_TBL_NUM; i++) {
-		reg = PPE_VLAN_CNT_TBL_ADDR + PPE_VLAN_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+		break;
+	case PPE_CNT_PORT_RX:
+		for (i = 0; i < PPE_PORT_RX_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_PORT_RX_CNT_TBL_ADDR + PPE_PORT_RX_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
+		}
 
-	for (i = 0; i < PPE_PRE_L2_CNT_TBL_NUM; i++) {
-		reg = PPE_PRE_L2_CNT_TBL_ADDR + PPE_PRE_L2_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
-	}
+		for (i = 0; i < PPE_PHY_PORT_RX_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_PHY_PORT_RX_CNT_TBL_ADDR + PPE_PHY_PORT_RX_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
+		}
 
-	for (i = 0; i < PPE_PORT_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_PORT_TX_DROP_CNT_TBL_ADDR + PPE_PORT_TX_DROP_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		break;
+	case PPE_CNT_VLAN_RX:
+		for (i = 0; i < PPE_VLAN_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_VLAN_CNT_TBL_ADDR + PPE_VLAN_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-		reg = PPE_PORT_TX_COUNTER_TBL_ADDR + PPE_PORT_TX_COUNTER_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+		break;
+	case PPE_CNT_L2_FWD:
+		for (i = 0; i < PPE_PRE_L2_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_PRE_L2_CNT_TBL_ADDR + PPE_PRE_L2_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
+		}
 
-	for (i = 0; i < PPE_EG_VSI_COUNTER_TBL_NUM; i++) {
-		reg = PPE_EG_VSI_COUNTER_TBL_ADDR + PPE_EG_VSI_COUNTER_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+		break;
+	case PPE_CNT_CPU_CODE:
+		for (i = 0; i < PPE_DROP_CPU_CNT_TBL_ENTRIES; i++) {
+			reg = PPE_DROP_CPU_CNT_TBL_ADDR + PPE_DROP_CPU_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-	for (i = 0; i < PPE_VPORT_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_VPORT_TX_COUNTER_TBL_ADDR + PPE_VPORT_TX_COUNTER_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		break;
+	case PPE_CNT_VLAN_TX:
+		for (i = 0; i < PPE_EG_VSI_COUNTER_TBL_ENTRIES; i++) {
+			reg = PPE_EG_VSI_COUNTER_TBL_ADDR + PPE_EG_VSI_COUNTER_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-		reg = PPE_VPORT_TX_DROP_CNT_TBL_ADDR + PPE_VPORT_TX_DROP_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+		break;
+	case PPE_CNT_PORT_TX:
+		for (i = 0; i < PPE_PORT_TX_COUNTER_TBL_ENTRIES; i++) {
+			reg = PPE_PORT_TX_DROP_CNT_TBL_ADDR + PPE_PORT_TX_DROP_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
 
-	for (i = 0; i < PPE_QUEUE_TX_COUNTER_TBL_NUM; i++) {
-		reg = PPE_QUEUE_TX_COUNTER_TBL_ADDR + PPE_QUEUE_TX_COUNTER_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+			reg = PPE_PORT_TX_COUNTER_TBL_ADDR + PPE_PORT_TX_COUNTER_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-	ppe_tbl_pkt_cnt_clear(ppe_dev, PPE_EPE_DBG_IN_CNT_ADDR, PPE_PKT_CNT_SIZE_1WORD);
-	ppe_tbl_pkt_cnt_clear(ppe_dev, PPE_EPE_DBG_OUT_CNT_ADDR, PPE_PKT_CNT_SIZE_1WORD);
+		for (i = 0; i < PPE_VPORT_TX_COUNTER_TBL_ENTRIES; i++) {
+			reg = PPE_VPORT_TX_COUNTER_TBL_ADDR + PPE_VPORT_TX_COUNTER_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
 
-	for (i = 0; i < PPE_DROP_CPU_CNT_TBL_NUM; i++) {
-		reg = PPE_DROP_CPU_CNT_TBL_ADDR + PPE_DROP_CPU_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
-	}
+			reg = PPE_VPORT_TX_DROP_CNT_TBL_ADDR + PPE_VPORT_TX_DROP_CNT_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-	for (i = 0; i < PPE_PORT_RX_CNT_TBL_NUM; i++) {
-		reg = PPE_PORT_RX_CNT_TBL_ADDR + PPE_PORT_RX_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
-	}
+		break;
+	case PPE_CNT_QM:
+		for (i = 0; i < PPE_QUEUE_TX_COUNTER_TBL_ENTRIES; i++) {
+			reg = PPE_QUEUE_TX_COUNTER_TBL_ADDR + PPE_QUEUE_TX_COUNTER_TBL_INC * i;
+			ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_3WORD);
+		}
 
-	for (i = 0; i < PPE_PHY_PORT_RX_CNT_TBL_NUM; i++) {
-		reg = PPE_PHY_PORT_RX_CNT_TBL_ADDR + PPE_PHY_PORT_RX_CNT_TBL_INC * i;
-		ppe_tbl_pkt_cnt_clear(ppe_dev, reg, PPE_PKT_CNT_SIZE_5WORD);
+		break;
+	default:
+		break;
 	}
 
 	return count;
 }
-
-static const struct file_operations ppe_debugfs_packet_counter_fops = {
-	.owner   = THIS_MODULE,
-	.open    = ppe_packet_counter_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.release = single_release,
-	.write   = ppe_packet_counter_clear,
-};
+DEFINE_SHOW_STORE_ATTRIBUTE(ppe_packet_counter);
 
 void ppe_debugfs_setup(struct ppe_device *ppe_dev)
 {
-	int ret;
+	struct ppe_debugfs_entry *entry;
+	int i, ret;
 
 	ppe_dev->debugfs_root = debugfs_create_dir("ppe", NULL);
-	debugfs_create_file("packet_counter", 0444,
-			    ppe_dev->debugfs_root,
-			    ppe_dev,
-			    &ppe_debugfs_packet_counter_fops);
+	if (IS_ERR(ppe_dev->debugfs_root))
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(debugfs_files); i++) {
+		entry = devm_kzalloc(ppe_dev->dev, sizeof(*entry), GFP_KERNEL);
+		if (!entry)
+			return;
+
+		entry->ppe = ppe_dev;
+		entry->counter_type = debugfs_files[i].counter_type;
+
+		debugfs_create_file(debugfs_files[i].name, 0444,
+				    ppe_dev->debugfs_root, entry,
+				    &ppe_packet_counter_fops);
+	}
 
 	if (!ppe_dev->debugfs_root) {
 		dev_err(ppe_dev->dev, "Error in PPE debugfs setup\n");

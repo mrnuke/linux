@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
- /* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ /* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
   */
 
  /* Qualcomm Ethernet DMA driver setup, HW configuration, clocks and
@@ -75,14 +75,14 @@ static u8 edma_pri_map[PPE_QUEUE_INTER_PRI_NUM] = {
 	0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7};
 
 enum edma_clk_id {
-	EDMA_CLK,
-	EDMA_CFG_CLK,
+	EDMA_SYS_CLK,
+	EDMA_APB_CLK,
 	EDMA_CLK_MAX
 };
 
 static const char * const clock_name[EDMA_CLK_MAX] = {
-	[EDMA_CLK] = "edma",
-	[EDMA_CFG_CLK] = "edma-cfg",
+	[EDMA_SYS_CLK] = "sys",
+	[EDMA_APB_CLK] = "apb",
 };
 
 /* Rx Fill ring info for IPQ9574. */
@@ -120,7 +120,7 @@ static struct edma_hw_info ipq9574_hw_info = {
 	.tx = &ipq9574_tx_ring_info,
 	.txcmpl = &ipq9574_txcmpl_ring_info,
 	.max_ports = 6,
-	.napi_budget_rx = 128,
+	.napi_budget_rx = 32,
 	.napi_budget_tx = 512,
 };
 
@@ -155,13 +155,12 @@ static int edma_clock_set_and_enable(struct device *dev,
 	}
 
 	of_node_put(edma_np);
-
 	dev_dbg(dev, "set %lu rate for %s\n", rate, id);
 
 	return 0;
 }
 
-static int edma_clock_init(void)
+static int edma_clock_configure(void)
 {
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct device *dev = ppe_dev->dev;
@@ -170,15 +169,17 @@ static int edma_clock_init(void)
 
 	ppe_rate = ppe_dev->clk_rate;
 
-	ret = edma_clock_set_and_enable(dev, clock_name[EDMA_CLK],
+	ret = edma_clock_set_and_enable(dev, clock_name[EDMA_SYS_CLK],
 					ppe_rate);
 	if (ret)
 		return ret;
 
-	ret = edma_clock_set_and_enable(dev, clock_name[EDMA_CFG_CLK],
+	ret = edma_clock_set_and_enable(dev, clock_name[EDMA_APB_CLK],
 					ppe_rate);
 	if (ret)
 		return ret;
+
+	dev_dbg(dev, "EDMA clocks are configured\n");
 
 	return 0;
 }
@@ -244,7 +245,7 @@ static int edma_configure_ucast_prio_map_tbl(void)
 		}
 
 		ret = ppe_edma_queue_offset_config(edma_ctx->ppe_dev,
-						   PPE_QUEUE_CLASS_PRIORITY, int_pri, pri_class);
+						   PPE_QUEUE_OFFSET_BY_PRIORITY, int_pri, pri_class);
 
 		if (ret) {
 			pr_err("Failed with error: %d to set queue priority class for int_pri: %d for profile_id: %d\n",
@@ -382,7 +383,7 @@ static int edma_irq_register(void)
 			goto txcmpl_ring_irq_name_alloc_fail;
 		}
 
-		snprintf(edma_txcmpl_irq_name[i], EDMA_IRQ_NAME_SIZE, "edma_txcmpl_%d",
+		snprintf(edma_txcmpl_irq_name[i], EDMA_IRQ_NAME_SIZE, "txcmpl_%d",
 			 txcmpl->ring_start + i);
 
 		irq_set_status_flags(edma_ctx->intr_info.intr_txcmpl[i], IRQ_DISABLE_UNLAZY);
@@ -419,7 +420,7 @@ static int edma_irq_register(void)
 			goto rxdesc_ring_irq_name_alloc_fail;
 		}
 
-		snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d",
+		snprintf(edma_rxdesc_irq_name[i], 20, "rxdesc_%d",
 			 rx->ring_start + i);
 
 		irq_set_status_flags(edma_ctx->intr_info.intr_rx[i], IRQ_DISABLE_UNLAZY);
@@ -442,7 +443,7 @@ static int edma_irq_register(void)
 
 	/* Request Misc IRQ */
 	ret = request_irq(edma_ctx->intr_info.intr_misc, edma_misc_handle_irq,
-			  IRQF_SHARED, "edma_misc",
+			  IRQF_SHARED, "misc",
 			  (void *)dev);
 	if (ret) {
 		pr_err("MISC IRQ:%d request failed\n",
@@ -479,7 +480,7 @@ txcmpl_ring_irq_name_alloc_fail:
 	return ret;
 }
 
-static int edma_irq_init(void)
+static int edma_irq_configure(void)
 {
 	struct edma_hw_info *hw_info = edma_ctx->hw_info;
 	struct edma_ring_info *txcmpl = hw_info->txcmpl;
@@ -502,7 +503,7 @@ static int edma_irq_init(void)
 
 	/* Get TXCMPL rings IRQ numbers. */
 	for (i = 0; i < txcmpl->num_rings; i++) {
-		snprintf(edma_irq_name, sizeof(edma_irq_name), "edma_txcmpl_%d",
+		snprintf(edma_irq_name, sizeof(edma_irq_name), "txcmpl_%d",
 			 txcmpl->ring_start + i);
 		edma_ctx->intr_info.intr_txcmpl[i] = of_irq_get_byname(edma_np, edma_irq_name);
 		if (edma_ctx->intr_info.intr_txcmpl[i] < 0) {
@@ -527,7 +528,7 @@ static int edma_irq_init(void)
 
 	/* Get RXDESC rings IRQ numbers. */
 	for (i = 0; i < rx->num_rings; i++) {
-		snprintf(edma_irq_name, sizeof(edma_irq_name), "edma_rxdesc_%d",
+		snprintf(edma_irq_name, sizeof(edma_irq_name), "rxdesc_%d",
 			 rx->ring_start + i);
 		edma_ctx->intr_info.intr_rx[i] = of_irq_get_byname(edma_np, edma_irq_name);
 		if (edma_ctx->intr_info.intr_rx[i] < 0) {
@@ -544,7 +545,7 @@ static int edma_irq_init(void)
 	}
 
 	/* Get misc IRQ number. */
-	edma_ctx->intr_info.intr_misc = of_irq_get_byname(edma_np, "edma_misc");
+	edma_ctx->intr_info.intr_misc = of_irq_get_byname(edma_np, "misc");
 	if (edma_ctx->intr_info.intr_misc < 0) {
 		dev_err(dev, "%s: misc_intr irq get failed\n", edma_np->name);
 		of_node_put(edma_np);
@@ -587,44 +588,23 @@ static int edma_hw_reset(void)
 	struct device *dev = ppe_dev->dev;
 	struct reset_control *edma_hw_rst;
 	struct device_node *edma_np;
-	const char *reset_string;
-	u32 count, i;
-	int ret;
 
-	/* Count and parse reset names from DTSI. */
 	edma_np = of_get_child_by_name(dev->of_node, "edma");
-	count = of_property_count_strings(edma_np, "reset-names");
-	if (count < 0) {
-		dev_err(dev, "EDMA reset entry not found\n");
+	edma_hw_rst = of_reset_control_get_exclusive(edma_np, NULL);
+	if (IS_ERR(edma_hw_rst)) {
 		of_node_put(edma_np);
-		return -EINVAL;
+		return PTR_ERR(edma_hw_rst);
 	}
 
-	for (i = 0; i < count; i++) {
-		ret = of_property_read_string_index(edma_np, "reset-names",
-						    i, &reset_string);
-		if (ret) {
-			dev_err(dev, "Error reading reset-names");
-			of_node_put(edma_np);
-			return -EINVAL;
-		}
+	/* 100ms delay is required by hardware to reset EDMA. */
+	reset_control_assert(edma_hw_rst);
+	fsleep(100);
 
-		edma_hw_rst = of_reset_control_get_exclusive(edma_np, reset_string);
-		if (IS_ERR(edma_hw_rst)) {
-			of_node_put(edma_np);
-			return PTR_ERR(edma_hw_rst);
-		}
+	reset_control_deassert(edma_hw_rst);
+	fsleep(100);
 
-		/* 100ms delay is required by hardware to reset EDMA. */
-		reset_control_assert(edma_hw_rst);
-		fsleep(100);
-
-		reset_control_deassert(edma_hw_rst);
-		fsleep(100);
-
-		reset_control_put(edma_hw_rst);
-		dev_dbg(dev, "EDMA HW reset, i:%d reset_string:%s\n", i, reset_string);
-	}
+	reset_control_put(edma_hw_rst);
+	dev_dbg(dev, "EDMA HW reset\n");
 
 	of_node_put(edma_np);
 
@@ -646,14 +626,12 @@ static int edma_hw_configure(void)
 
 	pr_debug("EDMA ver %d hw init\n", data);
 
-	/* Setup private data structure. */
 	edma_ctx->intr_info.intr_mask_rx = EDMA_RXDESC_INT_MASK_PKT_INT;
 	edma_ctx->intr_info.intr_mask_txcmpl = EDMA_TX_INT_MASK_PKT_INT;
 
-	/* Reset EDMA. */
 	ret = edma_hw_reset();
 	if (ret) {
-		pr_err("Error in resetting the hardware. ret: %d\n", ret);
+		pr_err("Error in resetting the hardware, ret: %d\n", ret);
 		return ret;
 	}
 
@@ -667,7 +645,7 @@ static int edma_hw_configure(void)
 	edma_ctx->dummy_dev = alloc_netdev_dummy(0);
 	if (!edma_ctx->dummy_dev) {
 		ret = -ENOMEM;
-		pr_err("Failed to allocate dummy device. ret: %d\n", ret);
+		pr_err("Failed to allocate dummy device, ret: %d\n", ret);
 		goto dummy_dev_alloc_failed;
 	}
 
@@ -681,7 +659,7 @@ static int edma_hw_configure(void)
 
 	ret = edma_alloc_rings();
 	if (ret) {
-		pr_err("Error in initializaing the rings. ret: %d\n", ret);
+		pr_err("Error in initializing the rings, ret: %d\n", ret);
 		goto edma_alloc_rings_failed;
 	}
 
@@ -701,7 +679,7 @@ static int edma_hw_configure(void)
 
 	ret = edma_cfg_rx_rings();
 	if (ret) {
-		pr_err("Error in configuring Rx rings. ret: %d\n", ret);
+		pr_err("Error in configuring Rx rings, ret: %d\n", ret);
 		goto edma_cfg_rx_rings_failed;
 	}
 
@@ -719,15 +697,13 @@ static int edma_hw_configure(void)
 	if (ret)
 		return ret;
 
-	/* Configure Tx Timeout Threshold. */
 	data = EDMA_TX_TIMEOUT_THRESH_VAL;
-
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TX_TIMEOUT_THRESH_ADDR;
 	ret = regmap_write(regmap, reg, data);
 	if (ret)
 		return ret;
 
-	/* Set Miscellaneous error mask. */
+	/* Set Miscellaneous error interrupt mask. */
 	data = EDMA_MISC_AXI_RD_ERR_MASK |
 		EDMA_MISC_AXI_WR_ERR_MASK |
 		EDMA_MISC_RX_DESC_FIFO_FULL_MASK |
@@ -742,15 +718,15 @@ static int edma_hw_configure(void)
 	edma_cfg_rx_napi_add();
 	edma_cfg_rx_napi_enable();
 
-	/* Global EDMA enable and padding enable. */
+	/* Enable whole edma to work and padding if packet length less than 60
+	 * byte in EDMA port interface control register.
+	 */
 	data = EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
-
 	reg = EDMA_BASE_OFFSET + EDMA_REG_PORT_CTRL_ADDR;
 	ret = regmap_write(regmap, reg, data);
 	if (ret)
 		return ret;
 
-	/* Initialize unicast priority map table. */
 	ret = (int)edma_configure_ucast_prio_map_tbl();
 	if (ret) {
 		pr_err("Failed to initialize unicast priority map table: %d\n",
@@ -758,13 +734,14 @@ static int edma_hw_configure(void)
 		goto configure_ucast_prio_map_tbl_failed;
 	}
 
-	/* Initialize RPS hash map table. */
 	ret = edma_cfg_rx_rps_hash_map();
 	if (ret) {
 		pr_err("Failed to configure rps hash table: %d\n",
 		       ret);
 		goto edma_cfg_rx_rps_hash_map_failed;
 	}
+
+	pr_info("EDMA Hardware Configured\n");
 
 	return 0;
 
@@ -802,14 +779,13 @@ void edma_destroy(struct ppe_device *ppe_dev)
 		edma_ctx->rx_rps_ctl_table_hdr = NULL;
 	}
 
-	/* Disable interrupts. */
 	for (i = 1; i <= hw_info->max_ports; i++)
 		edma_cfg_tx_disable_interrupts(i);
 
 	edma_cfg_rx_disable_interrupts();
 	edma_disable_misc_interrupt();
 
-	/* Free IRQ for TXCMPL rings. */
+	/* Free IRQ for Tx cmpl rings. */
 	for (i = 0; i < txcmpl->num_rings; i++) {
 		synchronize_irq(edma_ctx->intr_info.intr_txcmpl[i]);
 
@@ -819,7 +795,7 @@ void edma_destroy(struct ppe_device *ppe_dev)
 	}
 	kfree(edma_txcmpl_irq_name);
 
-	/* Free IRQ for RXDESC rings */
+	/* Free IRQ for Rx DESC rings */
 	for (i = 0; i < rx->num_rings; i++) {
 		synchronize_irq(edma_ctx->intr_info.intr_rx[i]);
 		free_irq(edma_ctx->intr_info.intr_rx[i],
@@ -860,7 +836,7 @@ static struct ctl_table edma_rx_rps_core_table[] = {
  * edma_setup - EDMA Setup.
  * @ppe_dev: PPE device
  *
- * Configure Ethernet global ctx, clocks, hardware and interrupts.
+ * Configure EDMA global context, clocks, hardware and interrupts.
  *
  * Return 0 on success, negative error code on failure.
  */
@@ -888,14 +864,11 @@ int edma_setup(struct ppe_device *ppe_dev)
 		return -EINVAL;
 	}
 
-	/* Configure the EDMA common clocks. */
-	ret = edma_clock_init();
+	ret = edma_clock_configure();
 	if (ret) {
 		dev_err(dev, "Error in configuring the EDMA clocks\n");
 		return ret;
 	}
-
-	dev_dbg(dev, "QCOM EDMA common clocks are configured\n");
 
 	ret = edma_hw_configure();
 	if (ret) {
@@ -903,7 +876,7 @@ int edma_setup(struct ppe_device *ppe_dev)
 		return ret;
 	}
 
-	ret = edma_irq_init();
+	ret = edma_irq_configure();
 	if (ret) {
 		dev_err(dev, "Error in irq initialization\n");
 		return ret;

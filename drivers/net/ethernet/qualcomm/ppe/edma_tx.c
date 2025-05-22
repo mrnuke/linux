@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Provide APIs to alloc Tx Buffers, fill the Tx descriptors and transmit
@@ -68,14 +68,9 @@ enum edma_tx_gso_status edma_tx_gso_segment(struct sk_buff *skb,
 	if (likely(!skb_is_nonlinear(skb)))
 		return EDMA_TX_GSO_NOT_NEEDED;
 
-	/* Check if TSO is enabled. If so, return as skb doesn't
-	 * need to be segmented by linux.
-	 */
-	if (netdev->features & (NETIF_F_TSO | NETIF_F_TSO6)) {
-		num_tx_desc_needed = edma_tx_num_descs_for_sg(skb);
-		if (likely(num_tx_desc_needed <= EDMA_TX_TSO_SEG_MAX))
-			return EDMA_TX_GSO_NOT_NEEDED;
-	}
+	num_tx_desc_needed = edma_tx_num_descs_for_sg(skb);
+	if (likely(num_tx_desc_needed <= EDMA_TX_TSO_SEG_MAX))
+		return EDMA_TX_GSO_NOT_NEEDED;
 
 	/* GSO segmentation of the skb into multiple segments. */
 	*segs = skb_gso_segment(skb, netdev->features
@@ -119,7 +114,7 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 	if (likely(txcmpl_ring->avail_pkt >= work_to_do)) {
 		avail = work_to_do;
 	} else {
-		/* Get TXCMPL ring producer index. */
+		/* Get Tx cmpl ring producer index. */
 		reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_PROD_IDX(txcmpl_ring->id);
 		regmap_read(regmap, reg, &data);
 		prod_idx = data & EDMA_TXCMPL_PROD_IDX_MASK;
@@ -128,7 +123,7 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 		txcmpl_ring->avail_pkt = avail;
 
 		if (unlikely(!avail)) {
-			dev_dbg(dev, "No available descriptors are pending for %d txcmpl ring\n",
+			dev_dbg(dev, "No available descriptors are pending for %d Tx cmpl ring\n",
 				txcmpl_ring->id);
 			u64_stats_update_begin(&txcmpl_stats->syncp);
 			++txcmpl_stats->no_pending_desc;
@@ -144,9 +139,6 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 	end_idx = (cons_idx + avail) & EDMA_TX_RING_SIZE_MASK;
 	txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
 
-	/* Instead of freeing the skb, it might be better to save and use
-	 * for Rxfill.
-	 */
 	while (likely(avail--)) {
 		/* The last descriptor holds the SKB pointer for scattered frames.
 		 * So skip the descriptors with more bit set.
@@ -172,7 +164,22 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 			++txcmpl_stats->invalid_buffer;
 			u64_stats_update_end(&txcmpl_stats->syncp);
 		} else {
-			dev_dbg(dev, "TXCMPL: skb:%p, skb->len %d, skb->data_len %d, cons_idx:%d prod_idx:%d word2:0x%x word3:0x%x\n",
+
+			/* Retrieve pool id for unmapping.
+			 * 0 for linear skb and (pool id - 1) represents nr_frag index.
+			 */
+			if (!EDMA_TXCOMP_POOL_ID_GET(txcmpl)) {
+				dma_unmap_single(dev, virt_to_phys(skb->data),
+						 skb_headlen(skb), DMA_TO_DEVICE);
+			} else {
+				u8 frag_index = (EDMA_TXCOMP_POOL_ID_GET(txcmpl) - 1);
+				skb_frag_t *frag = &skb_shinfo(skb)->frags[frag_index];
+
+				dma_unmap_page(dev, virt_to_phys(frag),
+					       PAGE_SIZE, DMA_TO_DEVICE);
+			}
+
+			dev_dbg(dev, "TXCMPL: skb:%pK, skb->len %d, skb->data_len %d, cons_idx:%d prod_idx:%d word2:0x%x word3:0x%x\n",
 				skb, skb->len, skb->data_len, cons_idx, prod_idx,
 				txcmpl->word2, txcmpl->word3);
 
@@ -187,20 +194,6 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 				u64_stats_update_end(&txcmpl_stats->syncp);
 			}
 
-			/* Retrieve pool id for unmapping.
-			 * 0 for linear skb and (pool id - 1) represents nr_frag index.
-			 */
-			if (!EDMA_TXCOMP_POOL_ID_GET(txcmpl)) {
-				dma_unmap_single(dev, virt_to_phys(skb->data),
-						 skb->len, DMA_TO_DEVICE);
-			} else {
-				u8 frag_index = (EDMA_TXCOMP_POOL_ID_GET(txcmpl) - 1);
-				skb_frag_t *frag = &skb_shinfo(skb)->frags[frag_index];
-
-				dma_unmap_page(dev, virt_to_phys(frag),
-					       PAGE_SIZE, DMA_TO_DEVICE);
-			}
-
 			dev_kfree_skb(skb);
 		}
 
@@ -211,7 +204,7 @@ u32 edma_tx_complete(u32 work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 	txcmpl_ring->cons_idx = cons_idx;
 	txcmpl_ring->avail_pkt -= count;
 
-	dev_dbg(dev, "TXCMPL:%u count:%u prod_idx:%u cons_idx:%u\n",
+	dev_dbg(dev, "Tx cmpl:%u count:%u prod_idx:%u cons_idx:%u\n",
 		txcmpl_ring->id, count, prod_idx, cons_idx);
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id);
 	regmap_write(regmap, reg, cons_idx);
@@ -265,7 +258,7 @@ int edma_tx_napi_poll(struct napi_struct *napi, int budget)
 	/* No more packets to process. Finish NAPI processing. */
 	napi_complete(napi);
 
-	/* Set TXCMPL ring interrupt mask. */
+	/* Set Tx cmpl ring interrupt mask. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TX_INT_MASK(txcmpl_ring->id);
 	regmap_write(regmap, reg, edma_ctx->intr_info.intr_mask_txcmpl);
 
@@ -392,7 +385,7 @@ static u32 edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring,
 	return num_descs;
 }
 
-static void edma_tx_fill_pp_desc(struct edma_port_priv *port_priv,
+static void edma_tx_fill_desc(struct edma_port_priv *port_priv,
 				 struct edma_txdesc_pri *txd, struct sk_buff *skb,
 	struct edma_port_tx_stats *stats)
 {
@@ -463,7 +456,7 @@ static struct edma_txdesc_pri *edma_tx_skb_first_desc(struct edma_port_priv *por
 
 	EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
 	EDMA_TXDESC_POOL_ID_SET(txd, 0);
-	edma_tx_fill_pp_desc(port_priv, txd, skb, stats);
+	edma_tx_fill_desc(port_priv, txd, skb, stats);
 
 	/* Set packet length in the descriptor. */
 	EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
@@ -528,6 +521,23 @@ static u32 edma_tx_skb_sg_fill_desc(struct edma_txdesc_ring *txdesc_ring,
 	/* Head skb processed already. */
 	num_descs++;
 
+	/* Process skb with nr_frags. */
+	if (unlikely(skb_shinfo(skb)->nr_frags)) {
+		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, skb,
+						  hw_next_to_use, &invalid_frag);
+		if (unlikely(!num_descs)) {
+			dev_dbg(dev, "No descriptor available for ring %d\n", txdesc_ring->id);
+			edma_tx_dma_unmap_frags(skb, invalid_frag);
+			*txdesc = NULL;
+			return num_descs;
+		}
+
+		u64_stats_update_begin(&stats->syncp);
+		stats->tx_nr_frag_pkts++;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	/* Process skb if it has frag_list */
 	if (unlikely(skb_has_frag_list(skb))) {
 		struct edma_txdesc_pri *start_desc = NULL;
 		u32 start_idx = 0, end_idx = 0;
@@ -608,23 +618,9 @@ skip_primary:
 		u64_stats_update_begin(&stats->syncp);
 		stats->tx_fraglist_pkts++;
 		u64_stats_update_end(&stats->syncp);
-	} else {
-		/* Process skb with nr_frags. */
-		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, skb,
-						  hw_next_to_use, &invalid_frag);
-		if (unlikely(!num_descs)) {
-			dev_dbg(dev, "No descriptor available for ring %d\n", txdesc_ring->id);
-			edma_tx_dma_unmap_frags(skb, invalid_frag);
-			*txdesc = NULL;
-			return num_descs;
-		}
-
-		u64_stats_update_begin(&stats->syncp);
-		stats->tx_nr_frag_pkts++;
-		u64_stats_update_end(&stats->syncp);
 	}
 
-	dev_dbg(dev, "skb:%p num_descs_filled: %u, nr_frags %u, frag_list fragments %u\n",
+	dev_dbg(dev, "skb:%pK num_descs_filled: %u, nr_frags %u, frag_list fragments %u\n",
 		skb, num_descs, skb_shinfo(skb)->nr_frags, num_sg_frag_list);
 
 	*txdesc = txd;
@@ -775,7 +771,7 @@ enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 			netdev_dbg(netdev, "No descriptor available for ring %d\n",
 				   txdesc_ring->id);
 			dma_unmap_single(dev, virt_to_phys(skb->data),
-					 skb->len, DMA_TO_DEVICE);
+					 skb_headlen(skb), DMA_TO_DEVICE);
 			u64_stats_update_begin(&txdesc_stats->syncp);
 			++txdesc_stats->no_desc_avail;
 			u64_stats_update_end(&txdesc_stats->syncp);
@@ -792,9 +788,11 @@ enum edma_tx_status edma_tx_ring_xmit(struct net_device *netdev,
 	txdesc_ring->prod_idx = hw_next_to_use & EDMA_TXDESC_PROD_IDX_MASK;
 	txdesc_ring->avail_desc -= num_desc_filled;
 
-	netdev_dbg(netdev, "%s: skb:%p tx_ring:%u proto:0x%x skb->len:%d\n port:%u prod_idx:%u ip_summed:0x%x\n",
+	netdev_dbg(netdev, "%s: skb:%pK tx_ring:%u proto:0x%x skb->len:%d\n port:%u prod_idx:%u ip_summed:0x%x\n",
 		   netdev->name, skb, txdesc_ring->id, ntohs(skb->protocol),
 		 skb->len, port_id, hw_next_to_use, skb->ip_summed);
+
+	dsb(st);
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id);
 	regmap_write(regmap, reg, txdesc_ring->prod_idx);

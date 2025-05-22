@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Configure rings, Buffers and NAPI for receive path along with
@@ -19,9 +19,6 @@
 #include "ppe.h"
 #include "ppe_regs.h"
 
-/* EDMA Queue ID to Ring ID Table. */
-#define EDMA_QID2RID_TABLE_MEM(q)	(0xb9000 + (0x4 * (q)))
-
 /* Rx ring queue offset. */
 #define EDMA_QUEUE_OFFSET(q_id)	((q_id) / EDMA_MAX_PRI_PER_CORE)
 
@@ -31,6 +28,9 @@
 
 /* EDMA Queue ID to Ring ID configuration. */
 #define EDMA_QID2RID_NUM_PER_REG	4
+
+/* EDMA Queue ID to Ring ID Table. */
+#define EDMA_QID2RID_TABLE_MEM(q)	(0xb9000 + (0x4 * (q)))
 
 int rx_queues[] = {0, 8, 16, 24};
 
@@ -75,7 +75,7 @@ static int edma_cfg_rx_desc_ring_reset_queue_priority(u32 rxdesc_ring_idx)
 	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
 		queue_id = edma_rx_ring_queue_map[i][rxdesc_ring_idx];
 
-		ret = ppe_queue_priority_set(edma_ctx->ppe_dev, queue_id, i);
+		ret = ppe_queue_node_priority_set(edma_ctx->ppe_dev, queue_id, i);
 		if (ret) {
 			pr_err("Error in resetting %u queue's priority\n",
 			       queue_id);
@@ -138,7 +138,7 @@ static int edma_cfg_rx_desc_ring_to_queue_mapping(void)
 			pr_err("Error in configuring Rx ring to PPE queue mapping, ret: %d, id: %d\n",
 			       ret, rxdesc_ring->ring_id);
 			if (!edma_cfg_rx_desc_rings_reset_queue_mapping())
-				pr_err("Error in resetting Rx desc ringbackpressure configurations\n");
+				pr_err("Error in resetting Rx desc ring configurations\n");
 
 			return ret;
 		}
@@ -219,7 +219,9 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(void)
 
 	desc_index = (rx->ring_start & EDMA_RX_RING_ID_MASK);
 
-	/* Here map all the queues to ring. */
+	/* There are 4 Rx desc rings, one for each core.
+	 * Map the unicast queues to Rx desc rings.
+	 */
 	for (q_id = EDMA_RX_QUEUE_START;
 		q_id <= EDMA_CPU_PORT_QUEUE_MAX(EDMA_RX_QUEUE_START);
 			q_id += EDMA_QID2RID_NUM_PER_REG) {
@@ -271,6 +273,11 @@ static void edma_cfg_rx_rings_to_rx_fill_mapping(void)
 	struct edma_ring_info *rx = hw_info->rx;
 	u32 i, data, reg;
 
+        /* Set RXDESC2FILL_MAP_xx reg.
+         * 3 registers hold the Rxfill mapping for all Rx desc rings.
+         * 3 bits holds the Rx fill ring mapping for each of the
+         * Rx descriptor ring.
+         */
 	regmap_write(regmap, EDMA_BASE_OFFSET + EDMA_REG_RXDESC2FILL_MAP_0_ADDR, 0);
 	regmap_write(regmap, EDMA_BASE_OFFSET + EDMA_REG_RXDESC2FILL_MAP_1_ADDR, 0);
 	regmap_write(regmap, EDMA_BASE_OFFSET + EDMA_REG_RXDESC2FILL_MAP_2_ADDR, 0);
@@ -326,7 +333,6 @@ void edma_cfg_rx_rings_enable(void)
 	struct edma_ring_info *rx = hw_info->rx;
 	u32 i, reg;
 
-	/* Enable Rx rings */
 	for (i = rx->ring_start; i < rx->ring_start + rx->num_rings; i++) {
 		u32 data;
 
@@ -445,7 +451,6 @@ static int edma_cfg_rx_fill_ring_dma_alloc(struct edma_rxfill_ring *rxfill_ring)
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct device *dev = ppe_dev->dev;
 
-	/* Allocate RxFill ring descriptors */
 	rxfill_ring->desc = dma_alloc_coherent(dev, (sizeof(struct edma_rxfill_desc)
 					       * rxfill_ring->count),
 					       &rxfill_ring->dma,
@@ -633,6 +638,62 @@ rxdesc_mem_alloc_fail:
 	return -ENOMEM;
 }
 
+static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
+{
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	u32 ring_sz, reg;
+
+	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_BA(rxfill_ring->ring_id);
+	regmap_write(regmap, reg, (u32)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
+
+	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
+	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id);
+	regmap_write(regmap, reg, ring_sz);
+
+	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
+}
+
+static void edma_cfg_rx_desc_ring_flow_control(u32 threshold_xoff, u32 threshold_xon)
+{
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	struct edma_ring_info *rx = hw_info->rx;
+	u32 data, i, reg;
+
+	data = (threshold_xoff & EDMA_RXDESC_FC_XOFF_THRE_MASK) << EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
+	data |= ((threshold_xon & EDMA_RXDESC_FC_XON_THRE_MASK) << EDMA_RXDESC_FC_XON_THRE_SHIFT);
+
+	for (i = 0; i < rx->num_rings; i++) {
+		struct edma_rxdesc_ring *rxdesc_ring;
+
+		rxdesc_ring = &edma_ctx->rx_rings[i];
+		reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id);
+		regmap_write(regmap, reg, data);
+	}
+}
+
+static void edma_cfg_rx_fill_ring_flow_control(int threshold_xoff, int threshold_xon)
+{
+	struct edma_hw_info *hw_info = edma_ctx->hw_info;
+	struct edma_ring_info *rxfill = hw_info->rxfill;
+	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
+	struct regmap *regmap = ppe_dev->regmap;
+	u32 data, i, reg;
+
+	data = (threshold_xoff & EDMA_RXFILL_FC_XOFF_THRE_MASK) << EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
+	data |= ((threshold_xon & EDMA_RXFILL_FC_XON_THRE_MASK) << EDMA_RXFILL_FC_XON_THRE_SHIFT);
+
+	for (i = 0; i < rxfill->num_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring;
+
+		rxfill_ring = &edma_ctx->rxfill_rings[i];
+		reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id);
+		regmap_write(regmap, reg, data);
+	}
+}
+
 /**
  * edma_cfg_rx_buff_size_setup - Configure EDMA Rx jumbo buffer
  *
@@ -727,62 +788,6 @@ void edma_cfg_rx_rings_cleanup(void)
 	kfree(edma_ctx->rx_rings);
 	edma_ctx->rxfill_rings = NULL;
 	edma_ctx->rx_rings = NULL;
-}
-
-static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
-{
-	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
-	struct regmap *regmap = ppe_dev->regmap;
-	u32 ring_sz, reg;
-
-	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_BA(rxfill_ring->ring_id);
-	regmap_write(regmap, reg, (u32)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
-
-	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
-	reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id);
-	regmap_write(regmap, reg, ring_sz);
-
-	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
-}
-
-static void edma_cfg_rx_desc_ring_flow_control(u32 threshold_xoff, u32 threshold_xon)
-{
-	struct edma_hw_info *hw_info = edma_ctx->hw_info;
-	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
-	struct regmap *regmap = ppe_dev->regmap;
-	struct edma_ring_info *rx = hw_info->rx;
-	u32 data, i, reg;
-
-	data = (threshold_xoff & EDMA_RXDESC_FC_XOFF_THRE_MASK) << EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
-	data |= ((threshold_xon & EDMA_RXDESC_FC_XON_THRE_MASK) << EDMA_RXDESC_FC_XON_THRE_SHIFT);
-
-	for (i = 0; i < rx->num_rings; i++) {
-		struct edma_rxdesc_ring *rxdesc_ring;
-
-		rxdesc_ring = &edma_ctx->rx_rings[i];
-		reg = EDMA_BASE_OFFSET + EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id);
-		regmap_write(regmap, reg, data);
-	}
-}
-
-static void edma_cfg_rx_fill_ring_flow_control(int threshold_xoff, int threshold_xon)
-{
-	struct edma_hw_info *hw_info = edma_ctx->hw_info;
-	struct edma_ring_info *rxfill = hw_info->rxfill;
-	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
-	struct regmap *regmap = ppe_dev->regmap;
-	u32 data, i, reg;
-
-	data = (threshold_xoff & EDMA_RXFILL_FC_XOFF_THRE_MASK) << EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
-	data |= ((threshold_xon & EDMA_RXFILL_FC_XON_THRE_MASK) << EDMA_RXFILL_FC_XON_THRE_SHIFT);
-
-	for (i = 0; i < rxfill->num_rings; i++) {
-		struct edma_rxfill_ring *rxfill_ring;
-
-		rxfill_ring = &edma_ctx->rxfill_rings[i];
-		reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id);
-		regmap_write(regmap, reg, data);
-	}
 }
 
 /**
@@ -978,7 +983,7 @@ int edma_cfg_rx_rps_hash_map(void)
 
 	for (hash = 0; hash < PPE_QUEUE_HASH_NUM; hash++) {
 		ret = ppe_edma_queue_offset_config(edma_ctx->ppe_dev,
-						   PPE_QUEUE_CLASS_HASH, hash, q_map[idx]);
+						   PPE_QUEUE_OFFSET_BY_HASH, hash, q_map[idx]);
 		if (ret)
 			return ret;
 

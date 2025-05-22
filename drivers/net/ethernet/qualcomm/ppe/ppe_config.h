@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __PPE_CONFIG_H__
@@ -8,50 +8,92 @@
 
 #include <linux/types.h>
 
-/* There are different queue config ranges for the destination port,
- * CPU code and service code.
+#include "ppe.h"
+
+/* There are different table index ranges for configuring queue base ID of
+ * the destination port, CPU code and service code.
  */
 #define PPE_QUEUE_BASE_DEST_PORT		0
 #define PPE_QUEUE_BASE_CPU_CODE			1024
 #define PPE_QUEUE_BASE_SERVICE_CODE		2048
 
+#define PPE_QUEUE_INTER_PRI_NUM			16
+#define PPE_QUEUE_HASH_NUM			256
+
+/* The service code is used by EDMA port to transmit packet to PPE. */
+#define PPE_EDMA_SC_BYPASS_ID			1
+
+/* The PPE RSS hash configured for IPv4 and IPv6 packet separately. */
 #define PPE_RSS_HASH_MODE_IPV4			BIT(0)
 #define PPE_RSS_HASH_MODE_IPV6			BIT(1)
 #define PPE_RSS_HASH_IP_LENGTH			4
 #define PPE_RSS_HASH_TUPLES			5
 
-#define PPE_RING_MAPPED_BP_QUEUE_WORD_COUNT	10
+/* PPE supports 300 queues, each bit presents as one queue. */
+#define PPE_RING_TO_QUEUE_BITMAP_WORD_CNT	10
 
 /**
- * struct ppe_qos_scheduler_cfg - PPE QoS scheduler configuration.
+ * enum ppe_scheduler_frame_mode - PPE scheduler frame mode.
+ * @PPE_SCH_WITH_IPG_PREAMBLE_FRAME_CRC: The scheduled frame includes IPG,
+ * preamble, Ethernet packet and CRC.
+ * @PPE_SCH_WITH_FRAME_CRC: The scheduled frame includes Ethernet frame and CRC
+ * excluding IPG and preamble.
+ * @PPE_SCH_WITH_L3_PAYLOAD: The scheduled frame includes layer 3 packet data.
+ */
+enum ppe_scheduler_frame_mode {
+	PPE_SCH_WITH_IPG_PREAMBLE_FRAME_CRC = 0,
+	PPE_SCH_WITH_FRAME_CRC = 1,
+	PPE_SCH_WITH_L3_PAYLOAD = 2,
+};
+
+/**
+ * struct ppe_scheduler_cfg - PPE scheduler configuration.
  * @flow_id: PPE flow ID.
  * @pri: Scheduler priority.
  * @drr_node_id: Node ID for scheduled traffic.
- * @drr_node_wt: weight for scheduled traffic.
- * @node_unit : Unit for scheduled traffic.
- * @node_frame_mode: Packet mode to be scheduled.
+ * @drr_node_wt: Weight for scheduled traffic.
+ * @unit_is_packet: Packet based or byte based unit for scheduled traffic.
+ * @frame_mode: Packet mode to be scheduled.
  *
- * PPE QoS feature supports the commit and exceed traffic.
+ * PPE scheduler supports commit rate and exceed rate configurations.
  */
-struct ppe_qos_scheduler_cfg {
+struct ppe_scheduler_cfg {
 	int flow_id;
 	int pri;
 	int drr_node_id;
 	int drr_node_wt;
-	int node_unit;
-	int node_frame_mode;
+	bool unit_is_packet;
+	enum ppe_scheduler_frame_mode frame_mode;
+};
+
+/**
+ * enum ppe_resource_type - PPE resource type.
+ * @PPE_RES_UCAST: Unicast queue resource.
+ * @PPE_RES_MCAST: Multicast queue resource.
+ * @PPE_RES_L0_NODE: Level 0 for queue based node resource.
+ * @PPE_RES_L1_NODE: Level 1 for flow based node resource.
+ * @PPE_RES_FLOW_ID: Flow based node resource.
+ */
+enum ppe_resource_type {
+	PPE_RES_UCAST,
+	PPE_RES_MCAST,
+	PPE_RES_L0_NODE,
+	PPE_RES_L1_NODE,
+	PPE_RES_FLOW_ID,
 };
 
 /**
  * struct ppe_queue_ucast_dest - PPE unicast queue destination.
  * @src_profile: Source profile.
- * @service_code_en: Enable service code.
+ * @service_code_en: Enable service code to map the queue base ID.
  * @service_code: Service code.
- * @cpu_code_en: Enable CPU code.
+ * @cpu_code_en: Enable CPU code to map the queue base ID.
  * @cpu_code: CPU code.
  * @dest_port: destination port.
  *
- * PPE egress queue ID is decided by the egress port ID.
+ * PPE egress queue ID is decided by the service code if enabled, otherwise
+ * by the CPU code if enabled, or by destination port if both service code
+ * and CPU code are disabled.
  */
 struct ppe_queue_ucast_dest {
 	int src_profile;
@@ -162,7 +204,7 @@ enum ppe_sc_tunnel_type {
 };
 
 /**
- * struct ppe_sc_bypss - PPE service bypass bitmaps
+ * struct ppe_sc_bypass - PPE service bypass bitmaps
  * @ingress: Bitmap of features that can be bypassed on the ingress packet.
  * @egress: Bitmap of features that can be bypassed on the egress packet.
  * @counter: Bitmap of features that can be bypassed on the counter type.
@@ -176,31 +218,36 @@ struct ppe_sc_bypass {
 };
 
 /**
- * struct ppe_servcode_cfg - PPE service code configuration.
+ * struct ppe_sc_cfg - PPE service code configuration.
  * @dest_port_valid: Generate destination port or not.
  * @dest_port: Destination port ID.
  * @bitmaps: Bitmap of bypass features.
  * @is_src: Destination port acts as source port, packet sent to CPU.
- * @field_update_bitmap: Fields updated to the EDMA preheader.
- * @next_service_code: New service code.
- * @hw_service: Hardware functions selected.
- * @offset_sel: Packet offset selection.
+ * @next_service_code: New service code generated.
+ * @eip_field_update_bitmap: Fields updated as actions taken for EIP.
+ * @eip_hw_service: Selected hardware functions for EIP.
+ * @eip_offset_sel: Packet offset selection, using packet's layer 4 offset
+ * or using packet's layer 3 offset for EIP.
  *
  * Service code is generated during the packet passing through PPE.
  */
-struct ppe_servcode_cfg {
+struct ppe_sc_cfg {
 	bool dest_port_valid;
 	int dest_port;
 	struct ppe_sc_bypass bitmaps;
 	bool is_src;
-	int field_update_bitmap;
 	int next_service_code;
-	int hw_service;
-	int offset_sel;
+	int eip_field_update_bitmap;
+	int eip_hw_service;
+	int eip_offset_sel;
 };
 
-/* The action of packet received by PPE can be forwarded, dropped, copied
- * to CPU (enter multicast queue), redirected to CPU (enter unicast queue).
+/**
+ * enum ppe_action_type - PPE action of the received packet.
+ * @PPE_ACTION_FORWARD: Packet forwarded per L2/L3 process.
+ * @PPE_ACTION_DROP: Packet dropped by PPE.
+ * @PPE_ACTION_COPY_TO_CPU: Packet copied to CPU port per multicast queue.
+ * @PPE_ACTION_REDIRECT_TO_CPU: Packet redirected to CPU port per unicast queue.
  */
 enum ppe_action_type {
 	PPE_ACTION_FORWARD = 0,
@@ -212,18 +259,20 @@ enum ppe_action_type {
 /**
  * struct ppe_rss_hash_cfg - PPE RSS hash configuration.
  * @hash_mask: Mask of the generated hash value.
- * @hash_fragment_mode: Mode of the fragment packet for 3 tuples.
+ * @hash_fragment_mode: Hash generation mode for the first fragment of TCP,
+ * UDP and UDP-Lite packets, to use either 3 tuple or 5 tuple for RSS hash
+ * key computation.
  * @hash_seed: Seed to generate RSS hash.
  * @hash_sip_mix: Source IP selection.
  * @hash_dip_mix: Destination IP selection.
  * @hash_protocol_mix: Protocol selection.
  * @hash_sport_mix: Source L4 port selection.
- * @hash_sport_mix: Destination L4 port selection.
+ * @hash_dport_mix: Destination L4 port selection.
  * @hash_fin_inner: RSS hash value first selection.
  * @hash_fin_outer: RSS hash value second selection.
  *
- * PPE RSS hash value is generated based on the RSS hash configuration
- * with the received packet.
+ * PPE RSS hash value is generated for the packet based on the RSS hash
+ * configured.
  */
 struct ppe_rss_hash_cfg {
 	u32 hash_mask;
@@ -241,28 +290,28 @@ struct ppe_rss_hash_cfg {
 int ppe_hw_config(struct ppe_device *ppe_dev);
 int ppe_queue_scheduler_set(struct ppe_device *ppe_dev,
 			    int node_id, bool flow_level, int port,
-			    struct ppe_qos_scheduler_cfg scheduler_cfg);
+			    struct ppe_scheduler_cfg scheduler_cfg);
 int ppe_queue_scheduler_get(struct ppe_device *ppe_dev,
 			    int node_id, bool flow_level, int *port,
-			    struct ppe_qos_scheduler_cfg *scheduler_cfg);
+			    struct ppe_scheduler_cfg *scheduler_cfg);
 int ppe_queue_ucast_base_set(struct ppe_device *ppe_dev,
 			     struct ppe_queue_ucast_dest queue_dst,
 			     int queue_base,
 			     int profile_id);
-int ppe_queue_ucast_pri_class_set(struct ppe_device *ppe_dev,
-				  int profile_id,
-				  int priority,
-				  int class_offset);
-int ppe_queue_ucast_hash_class_set(struct ppe_device *ppe_dev,
+int ppe_queue_ucast_offset_pri_set(struct ppe_device *ppe_dev,
 				   int profile_id,
-				   int rss_hash,
-				   int class_offset);
-int ppe_port_resource_get(struct ppe_device *ppe_dev, int port, int type,
+				   int priority,
+				   int queue_offset);
+int ppe_queue_ucast_offset_hash_set(struct ppe_device *ppe_dev,
+				    int profile_id,
+				    int rss_hash,
+				    int queue_offset);
+int ppe_port_resource_get(struct ppe_device *ppe_dev, int port,
+			  enum ppe_resource_type type,
 			  int *res_start, int *res_end);
-int ppe_servcode_config_set(struct ppe_device *ppe_dev,
-			    int servcode,
-			    struct ppe_servcode_cfg cfg);
-int ppe_counter_set(struct ppe_device *ppe_dev, int port, bool enable);
+int ppe_sc_config_set(struct ppe_device *ppe_dev, int sc,
+		      struct ppe_sc_cfg cfg);
+int ppe_counter_enable_set(struct ppe_device *ppe_dev, int port);
 int ppe_rss_hash_config_set(struct ppe_device *ppe_dev, int mode,
 			    struct ppe_rss_hash_cfg hash_cfg);
 int ppe_ring_queue_map_set(struct ppe_device *ppe_dev,

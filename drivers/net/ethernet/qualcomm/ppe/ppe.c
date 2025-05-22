@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* PPE platform device probe, DTSI parser and PPE clock initializations. */
@@ -23,8 +23,8 @@
 #define PPE_PORT_MAX		8
 #define PPE_CLK_RATE		353000000
 
-/* ICC clocks for enabling PPE device. The avg and peak with value 0
- * will be decided by the clock rate of PPE.
+/* ICC clocks for enabling PPE device. The avg_bw and peak_bw with value 0
+ * will be updated by the clock rate of PPE.
  */
 static const struct icc_bulk_data ppe_icc_data[] = {
 	{
@@ -137,9 +137,9 @@ static int ppe_clock_init_and_reset(struct ppe_device *ppe_dev)
 	if (ret)
 		return ret;
 
-	/* PPE clocks take the same clock tree, which work on the same
-	 * clock rate. Setting the clock rate of "ppe" ensures the clock
-	 * rate of all PPE clocks configured as same.
+	/* The PPE clocks have a common parent clock. Setting the clock
+	 * rate of "ppe" ensures the clock rate of all PPE clocks is
+	 * configured to the same rate.
 	 */
 	clk = devm_clk_get(dev, "ppe");
 	if (IS_ERR(clk))
@@ -153,25 +153,19 @@ static int ppe_clock_init_and_reset(struct ppe_device *ppe_dev)
 	if (ret < 0)
 		return ret;
 
+	/* Reset the PPE. */
 	rstc = devm_reset_control_get_exclusive(dev, NULL);
 	if (IS_ERR(rstc))
 		return PTR_ERR(rstc);
 
-	/* Reset PPE, the delay 100ms of assert and deassert is necessary
-	 * for resetting PPE.
-	 */
 	ret = reset_control_assert(rstc);
 	if (ret)
 		return ret;
 
-	msleep(100);
-	ret = reset_control_deassert(rstc);
-	if (ret)
-		return ret;
+	/* The delay 10 ms of assert is necessary for resetting PPE. */
+	usleep_range(10000, 11000);
 
-	msleep(100);
-
-	return 0;
+	return reset_control_deassert(rstc);
 }
 
 static int qcom_ppe_probe(struct platform_device *pdev)
@@ -182,11 +176,10 @@ static int qcom_ppe_probe(struct platform_device *pdev)
 	int ret, num_icc;
 
 	num_icc = ARRAY_SIZE(ppe_icc_data);
-	ppe_dev = devm_kzalloc(dev,
-			       struct_size(ppe_dev, icc_paths, num_icc),
+	ppe_dev = devm_kzalloc(dev, struct_size(ppe_dev, icc_paths, num_icc),
 			       GFP_KERNEL);
 	if (!ppe_dev)
-		return dev_err_probe(dev, -ENOMEM, "PPE alloc memory failed\n");
+		return -ENOMEM;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -231,16 +224,14 @@ static void qcom_ppe_remove(struct platform_device *pdev)
 	struct ppe_device *ppe_dev;
 
 	ppe_dev = platform_get_drvdata(pdev);
-	ppe_debugfs_teardown(ppe_dev);
 	ppe_port_mac_deinit(ppe_dev);
+	ppe_debugfs_teardown(ppe_dev);
 	edma_destroy(ppe_dev);
-
-	platform_set_drvdata(pdev, NULL);
 }
 
 static const struct of_device_id qcom_ppe_of_match[] = {
 	{ .compatible = "qcom,ipq9574-ppe" },
-	{},
+	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_ppe_of_match);
 
@@ -255,4 +246,4 @@ static struct platform_driver qcom_ppe_driver = {
 module_platform_driver(qcom_ppe_driver);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Qualcomm IPQ PPE driver");
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. IPQ PPE driver");

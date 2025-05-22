@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
- /* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ /* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
   */
 
 /* EDMA port initialization, configuration and netdevice ops handling */
@@ -59,8 +59,11 @@ static void edma_port_stats_free(struct net_device *netdev)
 static void edma_port_configure(struct net_device *netdev)
 {
 	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
-	struct ppe_port *port =  port_priv->ppe_port;
+	struct ppe_port *port = port_priv->ppe_port;
 	int port_id = port->port_id;
+
+	netdev_dbg(netdev, "Configuring the port %s(qcom-id:%d)\n",
+		   netdev->name, port_id);
 
 	edma_cfg_tx_fill_per_port_tx_map(netdev, port_id);
 	edma_cfg_tx_rings_enable(port_id);
@@ -70,7 +73,7 @@ static void edma_port_configure(struct net_device *netdev)
 static void edma_port_deconfigure(struct net_device *netdev)
 {
 	struct edma_port_priv *port_priv = (struct edma_port_priv *)netdev_priv(netdev);
-	struct ppe_port *port =  port_priv->ppe_port;
+	struct ppe_port *port = port_priv->ppe_port;
 	int port_id = port->port_id;
 
 	edma_cfg_tx_napi_delete(port_id);
@@ -140,7 +143,6 @@ static int edma_port_close(struct net_device *netdev)
 	edma_cfg_tx_disable_interrupts(port_id);
 	edma_cfg_tx_napi_disable(port_id);
 
-	/* Phylink close. */
 	if (ppe_port->phylink)
 		phylink_stop(ppe_port->phylink);
 
@@ -219,7 +221,7 @@ static netdev_tx_t edma_port_xmit(struct sk_buff *skb,
 		if (unlikely(ret == EDMA_TX_FAIL_NO_DESC)) {
 			if (likely(!edma_ctx->tx_requeue_stop)) {
 				cpu_id = smp_processor_id();
-				netdev_dbg(dev, "Stopping tx queue due to lack oftx descriptors\n");
+				netdev_dbg(dev, "Stopping tx queue due to lack of tx descriptors\n");
 				u64_stats_update_begin(&stats->syncp);
 				++stats->tx_queue_stopped[cpu_id];
 				u64_stats_update_end(&stats->syncp);
@@ -406,15 +408,11 @@ int edma_port_setup(struct ppe_port *port)
 			    port_id, netdev->dev_addr);
 	}
 
-	/* Allocate memory for EDMA port statistics. */
 	ret = edma_port_stats_alloc(netdev);
 	if (ret) {
 		netdev_dbg(netdev, "EDMA port stats alloc failed\n");
 		goto stats_alloc_fail;
 	}
-
-	netdev_dbg(netdev, "Configuring the port %s(qcom-id:%d)\n",
-		   netdev->name, port_id);
 
 	/* We expect 'port_id' to correspond to ports numbers on SoC.
 	 * These begin from '1' and hence we subtract
@@ -424,7 +422,6 @@ int edma_port_setup(struct ppe_port *port)
 
 	edma_port_configure(netdev);
 
-	/* Setup phylink. */
 	ret = ppe_port_phylink_setup(port, netdev);
 	if (ret) {
 		netdev_dbg(netdev, "EDMA port phylink setup for netdevice %s\n",
@@ -432,7 +429,6 @@ int edma_port_setup(struct ppe_port *port)
 		goto port_phylink_setup_fail;
 	}
 
-	/* Register the network interface. */
 	ret = register_netdev(netdev);
 	if (ret) {
 		netdev_dbg(netdev, "Error registering netdevice %s\n",
@@ -440,7 +436,7 @@ int edma_port_setup(struct ppe_port *port)
 		goto register_netdev_fail;
 	}
 
-	netdev_dbg(netdev, "Setup EDMA port GMAC%d done\n", port_id);
+	netdev_dbg(netdev, "Setup EDMA port%d done\n", port_id);
 	return ret;
 
 register_netdev_fail:

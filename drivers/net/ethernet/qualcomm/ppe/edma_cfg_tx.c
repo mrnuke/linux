@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Configure rings, Buffers and NAPI for transmit path along with
@@ -27,7 +27,7 @@ static void edma_cfg_txcmpl_ring_cleanup(struct edma_txcmpl_ring *txcmpl_ring)
 	/* Free any buffers assigned to any descriptors. */
 	edma_tx_complete(EDMA_TX_RING_SIZE - 1, txcmpl_ring);
 
-	/* Free TxCmpl ring descriptors. */
+	/* Free Tx cmpl ring descriptors. */
 	dma_free_coherent(dev, sizeof(struct edma_txcmpl_desc)
 			  * txcmpl_ring->count, txcmpl_ring->desc,
 			  txcmpl_ring->dma);
@@ -101,7 +101,6 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 	struct ppe_device *ppe_dev = edma_ctx->ppe_dev;
 	struct device *dev = ppe_dev->dev;
 
-	/* Allocate RxFill ring descriptors. */
 	txdesc_ring->pdesc = dma_alloc_coherent(dev, sizeof(struct edma_txdesc_pri)
 						* txdesc_ring->count,
 						&txdesc_ring->pdma,
@@ -159,14 +158,14 @@ static void edma_cfg_txcmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 	struct regmap *regmap = ppe_dev->regmap;
 	u32 data, reg;
 
-	/* Configure TxCmpl ring base address. */
+	/* Configure Tx cmpl ring base address. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_BA(txcmpl_ring->id);
 	regmap_write(regmap, reg, (u32)(txcmpl_ring->dma & EDMA_RING_DMA_MASK));
 
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_RING_SIZE(txcmpl_ring->id);
 	regmap_write(regmap, reg, (u32)(txcmpl_ring->count & EDMA_TXDESC_RING_SIZE_MASK));
 
-	/* Set TxCmpl ret mode to opaque. */
+	/* Set Tx cmpl ret mode to opaque. */
 	reg = EDMA_BASE_OFFSET + EDMA_REG_TXCMPL_CTRL(txcmpl_ring->id);
 	regmap_write(regmap, reg, EDMA_TXCMPL_RETMODE_OPAQUE);
 
@@ -327,10 +326,10 @@ void edma_cfg_tx_ring_mappings(void)
 		else
 			reg = EDMA_BASE_OFFSET + EDMA_REG_TXDESC2CMPL_MAP_5_ADDR;
 
-		pr_debug("Configure Tx desc:%u to use TxCmpl:%u\n", i, desc_index);
+		pr_debug("Configure Tx desc:%u to use Tx cmpl:%u\n", i, desc_index);
 
 		/* Set the Tx complete descriptor ring number in the mapping register.
-		 * E.g. If (txcmpl ring)desc_index = 31, (txdesc ring)i = 28.
+		 * E.g. If (Tx cmpl ring)desc_index = 31, (txdesc ring)i = 28.
 		 *	reg = EDMA_REG_TXDESC2CMPL_MAP_4_ADDR
 		 *	data |= (desc_index & 0x1F) << ((i % 6) * 5);
 		 *	data |= (0x1F << 20); -
@@ -408,7 +407,7 @@ static int edma_cfg_tx_rings_setup(void)
 		}
 	}
 
-	/* Allocate TxCmpl ring descriptors. */
+	/* Allocate Tx cmpl ring descriptors. */
 	for (i = 0; i < txcmpl->num_rings; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring = NULL;
 		int ret;
@@ -419,7 +418,7 @@ static int edma_cfg_tx_rings_setup(void)
 
 		ret = edma_cfg_txcmpl_ring_setup(txcmpl_ring);
 		if (ret != 0) {
-			pr_err("Error in setting up %d TxCmpl ring. ret: %d",
+			pr_err("Error in setting up %d Tx cmpl ring. ret: %d",
 			       txcmpl_ring->id, ret);
 			while (i-- >= 0)
 				edma_cfg_txcmpl_ring_cleanup(&edma_ctx->txcmpl_rings[i]);
@@ -527,7 +526,7 @@ void edma_cfg_tx_rings(void)
 	for (i = 0; i < tx->num_rings; i++)
 		edma_cfg_tx_desc_ring_configure(&edma_ctx->tx_rings[i]);
 
-	/* Configure TxCmpl ring. */
+	/* Configure Tx cmpl ring. */
 	for (i = 0; i < txcmpl->num_rings; i++)
 		edma_cfg_txcmpl_ring_configure(&edma_ctx->txcmpl_rings[i]);
 }
@@ -666,7 +665,7 @@ void edma_cfg_tx_napi_add(struct net_device *netdev, u32 port_id)
 		netif_napi_add_weight(netdev, &txcmpl_ring->napi,
 				      edma_tx_napi_poll, hw_info->napi_budget_tx);
 		txcmpl_ring->napi_added = true;
-		netdev_dbg(netdev, "Napi added for txcmpl ring: %u\n", txcmpl_ring->id);
+		netdev_dbg(netdev, "Napi added for Tx cmpl ring: %u\n", txcmpl_ring->id);
 	}
 
 	netdev_dbg(netdev, "Tx NAPI budget: %d\n", edma_tx_napi_budget);
