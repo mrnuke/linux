@@ -112,6 +112,12 @@ bool phy_package_probe_once(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(phy_package_probe_once);
 
+bool phy_package_remove_once(struct phy_device *phydev)
+{
+	return __phy_package_set_once(phydev, 2);
+}
+EXPORT_SYMBOL_GPL(phy_package_remove_once);
+
 /**
  * phy_package_join - join a common PHY group
  * @phydev: target phy_device struct
