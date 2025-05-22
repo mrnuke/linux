@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_TX__
@@ -66,7 +66,7 @@
 #define EDMA_TXDESC_L4_CSUM_SET(desc)  ((desc)->word5 |= \
 			       (FIELD_PREP(EDMA_TXDESC_L4_CSUM_SET_MASK, 1)))
 
-#define EDMA_TXDESC_POOL_ID_SET_MASK	GENMASK(24, 18)
+#define EDMA_TXDESC_POOL_ID_SET_MASK	GENMASK(23, 18)
 #define EDMA_TXDESC_POOL_ID_SET(desc, x)	((desc)->word5 |= \
 				(FIELD_PREP(EDMA_TXDESC_POOL_ID_SET_MASK, x)))
 
@@ -153,7 +153,7 @@ enum edma_tx_gso_status {
 };
 
 /**
- * struct edma_txcmpl_stats - EDMA TX complete ring statistics.
+ * struct edma_txcmpl_stats - EDMA Tx complete ring statistics.
  * @invalid_buffer: Invalid buffer address received.
  * @errors: Other Tx complete descriptor errors indicated by the hardware.
  * @desc_with_more_bit: Packet's segment transmit count.
@@ -181,7 +181,7 @@ struct edma_txdesc_stats {
 };
 
 /**
- * struct edma_txdesc_pri - EDMA primary TX descriptor.
+ * struct edma_txdesc_pri - EDMA primary Tx descriptor.
  * @word0: Low 32-bit of buffer address.
  * @word1: Buffer recycling, PTP tag flag, PRI valid flag.
  * @word2: Low 32-bit of opaque value.
@@ -203,7 +203,7 @@ struct edma_txdesc_pri {
 };
 
 /**
- * struct edma_txdesc_sec - EDMA secondary TX descriptor.
+ * struct edma_txdesc_sec - EDMA secondary Tx descriptor.
  * @word0: Reserved.
  * @word1: Custom csum offset, payload offset, TTL/NAT action.
  * @word2: NAPT translated port, DSCP value, TTL value.
@@ -225,7 +225,7 @@ struct edma_txdesc_sec {
 };
 
 /**
- * struct edma_txcmpl_desc - EDMA TX complete descriptor.
+ * struct edma_txcmpl_desc - EDMA Tx complete descriptor.
  * @word0: Low 32-bit opaque value.
  * @word1: High 32-bit opaque value.
  * @word2: More fragment, transmit ring id, pool id.
@@ -239,7 +239,7 @@ struct edma_txcmpl_desc {
 };
 
 /**
- * struct edma_txdesc_ring - EDMA TX descriptor ring
+ * struct edma_txdesc_ring - EDMA Tx descriptor ring
  * @prod_idx: Producer index
  * @id: Tx ring number
  * @avail_desc: Number of available descriptor to process
@@ -265,7 +265,7 @@ struct edma_txdesc_ring {
 };
 
 /**
- * struct edma_txcmpl_ring - EDMA TX complete ring
+ * struct edma_txcmpl_ring - EDMA Tx complete ring
  * @napi: NAPI
  * @cons_idx: Consumer index
  * @avail_pkt: Number of available packets to process
