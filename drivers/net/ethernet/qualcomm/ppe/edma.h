@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_MAIN__
 #define __EDMA_MAIN__
 
-#include "ppe_config.h"
 #include "edma_rx.h"
 #include "edma_tx.h"
+#include "ppe_api.h"
 
 /* One clock cycle = 1/(EDMA clock frequency in Mhz) micro seconds.
  *
@@ -35,16 +35,6 @@
 			typeof(_max) (max) = (_max); \
 			((((head) - (tail)) + \
 			(max)) & ((max) - 1)); })
-
-/**
- * enum ppe_queue_class_type - PPE queue class type
- * @PPE_QUEUE_CLASS_PRIORITY: Queue offset configured from internal priority
- * @PPE_QUEUE_CLASS_HASH: Queue offset configured from RSS hash.
- */
-enum ppe_queue_class_type {
-	PPE_QUEUE_CLASS_PRIORITY,
-	PPE_QUEUE_CLASS_HASH,
-};
 
 /**
  * struct edma_err_stats - EDMA error stats
@@ -123,7 +113,7 @@ struct edma_intr_info {
 /**
  * struct edma_context - EDMA context.
  * @netdev_arr: Net device for each EDMA port
- * @dummy_dev: Dummy netdevice for RX DMA
+ * @dummy_dev: Dummy netdevice for Rx DMA
  * @ppe_dev: PPE device
  * @hw_info: EDMA Hardware info
  * @intr_info: EDMA Interrupt info
@@ -154,7 +144,7 @@ struct edma_context {
 	bool tx_requeue_stop;
 };
 
-/* Global EDMA context */
+/* Global EDMA context. */
 extern struct edma_context *edma_ctx;
 
 int edma_err_stats_alloc(void);
@@ -164,13 +154,4 @@ int edma_setup(struct ppe_device *ppe_dev);
 void edma_debugfs_teardown(void);
 int edma_debugfs_setup(struct ppe_device *ppe_dev);
 void edma_set_ethtool_ops(struct net_device *netdev);
-int ppe_edma_queue_offset_config(struct ppe_device *ppe_dev,
-				 enum ppe_queue_class_type class,
-				 int index, int queue_offset);
-int ppe_edma_queue_resource_get(struct ppe_device *ppe_dev, int type,
-				int *res_start, int *res_end);
-int ppe_edma_ring_to_queues_config(struct ppe_device *ppe_dev, int ring_id,
-				   int num, int queues[] __counted_by(num));
-
-
 #endif

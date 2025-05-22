@@ -20,16 +20,6 @@
 #define PPE_PORT5_SEL_PCS1			BIT(4)
 #define PPE_PORT_SEL_XGMAC(x)			(BIT(8) << ((x) - 1))
 
-/* PPE port LPI enable register */
-#define PPE_LPI_EN_ADDR				0x400
-#define PPE_LPI_PORT1_EN			BIT(0)
-#define PPE_LPI_PORT2_EN			BIT(1)
-#define PPE_LPI_PORT3_EN			BIT(2)
-#define PPE_LPI_PORT4_EN			BIT(3)
-#define PPE_LPI_PORT5_EN			BIT(4)
-#define PPE_LPI_PORT6_EN			BIT(5)
-#define PPE_LPI_PORT_EN(x)			(BIT(0) << ((x) - 1))
-
 /* PPE scheduler configurations for buffer manager block. */
 #define PPE_BM_SCH_CTRL_ADDR			0xb000
 #define PPE_BM_SCH_CTRL_INC			4
@@ -46,9 +36,6 @@
 #define PPE_DROP_STAT_TBL_ADDR			0xe000
 #define PPE_DROP_STAT_TBL_ENTRIES		30
 #define PPE_DROP_STAT_TBL_INC			0x10
-
-#define PPE_EPE_DBG_IN_CNT_ADDR			0x26054
-#define PPE_EPE_DBG_OUT_CNT_ADDR		0x26070
 
 /* Egress VLAN counters. */
 #define PPE_EG_VSI_COUNTER_TBL_ADDR		0x41000
@@ -578,6 +565,41 @@
 #define PPE_ENQ_OPR_TBL_INC			0x10
 #define PPE_ENQ_OPR_TBL_ENQ_DISABLE		BIT(0)
 
+/* Unicast drop count includes the possible drops with WRED for the green,
+ * yellow and red categories.
+ */
+#define PPE_UNICAST_DROP_CNT_TBL_ADDR		0x9e0000
+#define PPE_UNICAST_DROP_CNT_TBL_ENTRIES	1536
+#define PPE_UNICAST_DROP_CNT_TBL_INC		0x10
+#define PPE_UNICAST_DROP_TYPES			6
+#define PPE_UNICAST_DROP_FORCE_OFFSET		3
+
+/* There are 16 multicast queues dedicated to CPU port 0. Multicast drop
+ * count includes the force drop for green, yellow and red category packets.
+ */
+#define PPE_P0_MULTICAST_DROP_CNT_TBL_ADDR	0x9f0000
+#define PPE_P0_MULTICAST_DROP_CNT_TBL_ENTRIES	48
+#define PPE_P0_MULTICAST_DROP_CNT_TBL_INC	0x10
+#define PPE_P0_MULTICAST_QUEUE_NUM		16
+
+/* Each PPE physical port has four dedicated multicast queues, providing
+ * a total of 12 entries per port. The multicast drop count includes forced
+ * drops for green, yellow, and red category packets.
+ */
+#define PPE_MULTICAST_QUEUE_PORT_ADDR_INC	0x1000
+#define PPE_MULTICAST_DROP_CNT_TBL_INC		0x10
+#define PPE_MULTICAST_DROP_TYPES		3
+#define PPE_MULTICAST_QUEUE_NUM			4
+#define PPE_MULTICAST_DROP_CNT_TBL_ENTRIES	12
+
+#define PPE_CPU_PORT_MULTICAST_FORCE_DROP_CNT_TBL_ADDR(mq_offset)	\
+	(PPE_P0_MULTICAST_DROP_CNT_TBL_ADDR +				\
+	 (mq_offset) * PPE_P0_MULTICAST_DROP_CNT_TBL_INC *		\
+	 PPE_MULTICAST_DROP_TYPES)
+
+#define PPE_P1_MULTICAST_DROP_CNT_TBL_ADDR	\
+	(PPE_P0_MULTICAST_DROP_CNT_TBL_ADDR + PPE_MULTICAST_QUEUE_PORT_ADDR_INC)
+
 /* PPE GMAC and XGMAC register base address */
 #define PPE_PORT_GMAC_ADDR(x)			(0x001000 + ((x) - 1) * 0x200)
 #define PPE_PORT_XGMAC_ADDR(x)			(0x500000 + ((x) - 1) * 0x4000)
@@ -614,7 +636,7 @@
 #define GMAC_ADDR_BYTE3				GENMASK(7, 0)
 
 /* GMAC control register */
-#define GMAC_CTRL_ADDR				0x18
+#define GMAC_CTRL0_ADDR				0x18
 #define GMAC_TX_THD_M				GENMASK(27, 24)
 #define GMAC_MAXFRAME_SIZE_M			GENMASK(21, 8)
 #define GMAC_CRS_SEL				BIT(6)
@@ -623,7 +645,7 @@
 	(GMAC_TX_THD_M | GMAC_MAXFRAME_SIZE_M | GMAC_CRS_SEL)
 
 /* GMAC debug control register */
-#define GMAC_DBG_CTRL_ADDR			0x1c
+#define GMAC_CTRL1_ADDR				0x1c
 #define GMAC_HIGH_IPG_M				GENMASK(15, 8)
 
 /* GMAC jumbo size register */
@@ -778,7 +800,7 @@
 #define XGMAC_RXBROAD_G_ADDR			0x918
 #define XGMAC_RXMULTI_G_ADDR			0x920
 #define XGMAC_RXCRC_ERR_ADDR			0x928
-#define XGMAC_RXRUNT_ERR_ADDR			0x930
+#define XGMAC_RXFRAG_ERR_ADDR			0x930
 #define XGMAC_RXJABBER_ERR_ADDR			0x934
 #define XGMAC_RXUNDERSIZE_G_ADDR		0x938
 #define XGMAC_RXOVERSIZE_G_ADDR			0x93C
@@ -892,7 +914,7 @@
 #define EDMA_REG_TX_MOD_TIMER(n)	(0x99008 + (0x1000 * (n)))
 #define EDMA_REG_TX_INT_CTRL(n)		(0x9900c + (0x1000 * (n)))
 
-/* EDMA_QID2RID_TABLE_MEM register field masks */
+/* EDMA_QID2RID_TABLE_MEM register (Rx queue to ring ID mapping) field masks */
 #define EDMA_RX_RING_ID_QUEUE0_MASK	GENMASK(7, 0)
 #define EDMA_RX_RING_ID_QUEUE1_MASK	GENMASK(15, 8)
 #define EDMA_RX_RING_ID_QUEUE2_MASK	GENMASK(23, 16)
@@ -920,7 +942,7 @@
 /* Rx Descriptor ring pre-header base address mask */
 #define EDMA_RXDESC_PREHEADER_BA_MASK		0xffffffff
 
-/* Tx descriptor prod ring index mask */
+/* Tx descriptor producer ring index mask */
 #define EDMA_TXDESC_PROD_IDX_MASK		0xffff
 
 /* Tx descriptor consumer ring index mask */
@@ -935,7 +957,7 @@
 #define EDMA_TXDESC_CTRL_TXEN_MASK		BIT(0)
 #define EDMA_TXDESC_CTRL_FC_GRP_ID_MASK		GENMASK(3, 1)
 
-/* Tx completion ring prod index mask */
+/* Tx completion ring producer index mask */
 #define EDMA_TXCMPL_PROD_IDX_MASK		0xffff
 
 /* Tx completion ring urgent threshold mask */
@@ -946,7 +968,7 @@
 #define EDMA_TX_MOD_TIMER_INIT_MASK		0xffff
 #define EDMA_TX_MOD_TIMER_INIT_SHIFT		0
 
-/* Rx fill ring prod index mask */
+/* Rx fill ring producer index mask */
 #define EDMA_RXFILL_PROD_IDX_MASK		0xffff
 
 /* Rx fill ring consumer index mask */
@@ -964,10 +986,10 @@
 /* Rx fill ring enable bit */
 #define EDMA_RXFILL_RING_EN			0x1
 
-/* Rx desc ring prod index mask */
+/* Rx desc ring producer index mask */
 #define EDMA_RXDESC_PROD_IDX_MASK		0xffff
 
-/* Rx descriptor ring cons index mask */
+/* Rx descriptor ring consumer index mask */
 #define EDMA_RXDESC_CONS_IDX_MASK		0xffff
 
 /* Rx descriptor ring size masks */
@@ -1005,23 +1027,23 @@
 /* EDMA Ring mask */
 #define EDMA_RING_DMA_MASK			0xffffffff
 
-/* RXDESC threshold interrupt. */
+/* Rx desc threshold interrupt. */
 #define EDMA_RXDESC_UGT_INT_STAT		0x2
 
-/* RXDESC timer interrupt */
+/* Rx desc timer interrupt */
 #define EDMA_RXDESC_PKT_INT_STAT		0x1
 
-/* RXDESC Interrupt status mask */
+/* Rx desc interrupt status mask */
 #define EDMA_RXDESC_RING_INT_STATUS_MASK \
 	(EDMA_RXDESC_UGT_INT_STAT | EDMA_RXDESC_PKT_INT_STAT)
 
-/* TXCMPL threshold interrupt. */
+/* Tx cmpl threshold interrupt. */
 #define EDMA_TXCMPL_UGT_INT_STAT		0x2
 
-/* TXCMPL timer interrupt */
+/* Tx cmpl timer interrupt */
 #define EDMA_TXCMPL_PKT_INT_STAT		0x1
 
-/* TXCMPL Interrupt status mask */
+/* Tx cmpl interrupt status mask */
 #define EDMA_TXCMPL_RING_INT_STATUS_MASK \
 	(EDMA_TXCMPL_UGT_INT_STAT | EDMA_TXCMPL_PKT_INT_STAT)
 

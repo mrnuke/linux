@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Provides APIs to alloc Rx Buffers, reap the buffers, receive and
@@ -33,10 +33,12 @@ static int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int a
 	struct device *dev = ppe_dev->dev;
 	u16 prod_idx, start_idx;
 	u16 num_alloc = 0;
+	u32 dma_map_size;
 	u32 reg;
 
 	prod_idx = rxfill_ring->prod_idx;
 	start_idx = prod_idx;
+	dma_map_size = rx_alloc_size - EDMA_RX_SKB_HEADROOM - NET_IP_ALIGN;
 
 	while (likely(alloc_count--)) {
 		dma_addr_t buff_addr;
@@ -56,9 +58,9 @@ static int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int a
 		skb_reserve(skb, EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN);
 
 		if (likely(!page_mode)) {
-			buff_addr = dma_map_single(dev, skb->data, rx_alloc_size, DMA_FROM_DEVICE);
+			buff_addr = dma_map_single(dev, skb->data, dma_map_size, DMA_TO_DEVICE);
 			if (dma_mapping_error(dev, buff_addr)) {
-				dev_dbg(dev, "edma_context:%p Unable to dma for non page mode",
+				dev_dbg(dev, "edma_context:%pK Unable to dma for non page mode",
 					edma_ctx);
 				dev_kfree_skb_any(skb);
 				break;
@@ -70,14 +72,14 @@ static int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int a
 				++rxfill_stats->page_alloc_failed;
 				u64_stats_update_end(&rxfill_stats->syncp);
 				dev_kfree_skb_any(skb);
-				dev_dbg(dev, "edma_context:%p Unable to allocate page",
+				dev_dbg(dev, "edma_context:%pK Unable to allocate page",
 					edma_ctx);
 				break;
 			}
 
-			buff_addr = dma_map_page(dev, pg, 0, PAGE_SIZE, DMA_FROM_DEVICE);
+			buff_addr = dma_map_page(dev, pg, 0, PAGE_SIZE, DMA_TO_DEVICE);
 			if (dma_mapping_error(dev, buff_addr)) {
-				dev_dbg(dev, "edma_context:%p Mapping error for page mode",
+				dev_dbg(dev, "edma_context:%pK Mapping error for page mode",
 					edma_ctx);
 				__free_page(pg);
 				dev_kfree_skb_any(skb);
@@ -97,9 +99,12 @@ static int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int a
 					   (u32)(buf_len) & EDMA_RXFILL_BUF_SIZE_MASK);
 		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
 		num_alloc++;
+
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
 	}
 
 	if (likely(num_alloc)) {
+		dsb(st);
 		reg = EDMA_BASE_OFFSET + EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id);
 		regmap_write(regmap, reg, prod_idx);
 		rxfill_ring->prod_idx = prod_idx;
@@ -122,24 +127,26 @@ int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count)
 	return edma_rx_alloc_buffer_list(rxfill_ring, alloc_count);
 }
 
-/* Mark ip_summed appropriately in the skb as per the L3/L4 checksum
- * status in descriptor.
- */
-static void edma_rx_checksum_verify(struct edma_rxdesc_pri *rxdesc_pri,
+static inline uint8_t edma_rx_checksum_verify(struct edma_rxdesc_pri *rxdesc_pri,
 				    struct sk_buff *skb)
 {
 	u8 pid = EDMA_RXDESC_PID_GET(rxdesc_pri);
 
 	skb_checksum_none_assert(skb);
 
+	/* Mark ip_summed appropriately in the skb as per the L3/L4 checksum
+	 * status in descriptor.
+	 */
 	if (likely(EDMA_RX_PID_IS_IPV4(pid))) {
 		if (likely(EDMA_RXDESC_L3CSUM_STATUS_GET(rxdesc_pri)) &&
 		    likely(EDMA_RXDESC_L4CSUM_STATUS_GET(rxdesc_pri)))
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			return CHECKSUM_UNNECESSARY;
 	} else if (likely(EDMA_RX_PID_IS_IPV6(pid))) {
 		if (likely(EDMA_RXDESC_L4CSUM_STATUS_GET(rxdesc_pri)))
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			return CHECKSUM_UNNECESSARY;
 	}
+
+	return skb->ip_summed;
 }
 
 static void edma_rx_process_last_segment(struct edma_rxdesc_ring *rxdesc_ring,
@@ -154,7 +161,6 @@ static void edma_rx_process_last_segment(struct edma_rxdesc_ring *rxdesc_ring,
 	struct net_device *dev;
 	u32 pkt_length;
 
-	/* Get packet length. */
 	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_pri);
 
 	skb_head = rxdesc_ring->head;
@@ -162,7 +168,7 @@ static void edma_rx_process_last_segment(struct edma_rxdesc_ring *rxdesc_ring,
 
 	/* Check Rx checksum offload status. */
 	if (likely(dev->features & NETIF_F_RXCSUM))
-		edma_rx_checksum_verify(rxdesc_pri, skb_head);
+		skb->ip_summed = edma_rx_checksum_verify(rxdesc_pri, skb_head);
 
 	/* Get stats for the netdevice. */
 	port_dev = netdev_priv(dev);
@@ -207,7 +213,7 @@ static void edma_rx_process_last_segment(struct edma_rxdesc_ring *rxdesc_ring,
 	rx_stats->rx_fraglist_pkts += (u64)(!page_mode);
 	u64_stats_update_end(&rx_stats->syncp);
 
-	pr_debug("edma_context:%p skb:%p Jumbo pkt_length:%u\n",
+	pr_debug("edma_context:%pK skb:%pK Jumbo pkt_length:%u\n",
 		 edma_ctx, skb_head, skb_head->len);
 
 	skb_head->protocol = eth_type_trans(skb_head, dev);
@@ -229,9 +235,8 @@ static void edma_rx_handle_frag_list(struct edma_rxdesc_ring *rxdesc_ring,
 {
 	u32 pkt_length;
 
-	/* Get packet length. */
 	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_pri);
-	pr_debug("edma_context:%p skb:%p fragment pkt_length:%u\n",
+	pr_debug("edma_context:%pK skb:%pK fragment pkt_length:%u\n",
 		 edma_ctx, skb, pkt_length);
 
 	if (!(rxdesc_ring->head)) {
@@ -275,9 +280,8 @@ static void edma_rx_handle_nr_frags(struct edma_rxdesc_ring *rxdesc_ring,
 	skb_frag_t *frag = NULL;
 	u32 pkt_length;
 
-	/* Get packet length. */
 	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_pri);
-	pr_debug("edma_context:%p skb:%p fragment pkt_length:%u\n",
+	pr_debug("edma_context:%pK skb:%pK fragment pkt_length:%u\n",
 		 edma_ctx, skb, pkt_length);
 
 	if (!(rxdesc_ring->head)) {
@@ -327,7 +331,6 @@ static bool edma_rx_handle_linear_packets(struct edma_rxdesc_ring *rxdesc_ring,
 	pcpu_stats = &port_dev->pcpu_stats;
 	rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
 
-	/* Get packet length. */
 	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_pri);
 
 	if (likely(!page_mode)) {
@@ -355,7 +358,7 @@ send_to_stack:
 
 	/* Check Rx checksum offload status. */
 	if (likely(skb->dev->features & NETIF_F_RXCSUM))
-		edma_rx_checksum_verify(rxdesc_pri, skb);
+		skb->ip_summed = edma_rx_checksum_verify(rxdesc_pri, skb);
 
 	u64_stats_update_begin(&rx_stats->syncp);
 	rx_stats->rx_pkts++;
@@ -363,14 +366,14 @@ send_to_stack:
 	rx_stats->rx_nr_frag_pkts += (u64)page_mode;
 	u64_stats_update_end(&rx_stats->syncp);
 
+	netdev_dbg(skb->dev, "edma_context:%pK, skb:%pK pkt_length:%u\n",
+		   edma_ctx, skb, skb->len);
+
 	skb->protocol = eth_type_trans(skb, skb->dev);
 	if (skb->dev->features & NETIF_F_GRO)
 		napi_gro_receive(&rxdesc_ring->napi, skb);
 	else
 		netif_receive_skb(skb);
-
-	netdev_dbg(skb->dev, "edma_context:%p, skb:%p pkt_length:%u\n",
-		   edma_ctx, skb, skb->len);
 
 	return true;
 }
@@ -390,7 +393,7 @@ static struct net_device *edma_rx_get_src_dev(struct edma_rxdesc_stats *rxdesc_s
 		src_port_num = src_info & EDMA_RXDESC_PORTNUM_BITS;
 	} else {
 		if (net_ratelimit()) {
-			pr_warn("Invalid src info_type:0x%x. Drop skb:%p\n",
+			pr_warn("Invalid src info_type:0x%x. Drop skb:%pK\n",
 				(src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK), skb);
 		}
 
@@ -401,11 +404,10 @@ static struct net_device *edma_rx_get_src_dev(struct edma_rxdesc_stats *rxdesc_s
 		return NULL;
 	}
 
-	/* Packet with PP source. */
 	if (likely(src_port_num <= hw_info->max_ports)) {
 		if (unlikely(src_port_num < EDMA_START_IFNUM)) {
 			if (net_ratelimit())
-				pr_warn("Port number error :%d. Drop skb:%p\n",
+				pr_warn("Port number error :%d. Drop skb:%pK\n",
 					src_port_num, skb);
 
 			u64_stats_update_begin(&rxdesc_stats->syncp);
@@ -427,7 +429,7 @@ static struct net_device *edma_rx_get_src_dev(struct edma_rxdesc_stats *rxdesc_s
 		return ndev;
 
 	if (net_ratelimit())
-		pr_warn("Netdev Null src_info_type:0x%x src port num:%d Drop skb:%p\n",
+		pr_warn("Netdev Null src_info_type:0x%x src port num:%d Drop skb:%pK\n",
 			(src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK),
 			src_port_num, skb);
 
@@ -482,16 +484,17 @@ static int edma_rx_reap(struct edma_rxdesc_ring *rxdesc_ring, int budget)
 		struct net_device *ndev;
 		struct sk_buff *skb;
 		dma_addr_t dma_addr;
+		u32 dma_map_size;
 
 		skb = next_skb;
 		rxdesc_pri = next_rxdesc_pri;
 		dma_addr = EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_pri);
+		dma_map_size = alloc_size - EDMA_RX_SKB_HEADROOM - NET_IP_ALIGN;
 
 		if (!page_mode)
-			dma_unmap_single(dev, dma_addr, alloc_size,
-					 DMA_TO_DEVICE);
+			dma_unmap_single(dev, dma_addr, dma_map_size, DMA_FROM_DEVICE);
 		else
-			dma_unmap_page(dev, dma_addr, PAGE_SIZE, DMA_TO_DEVICE);
+			dma_unmap_page(dev, dma_addr, PAGE_SIZE, DMA_FROM_DEVICE);
 
 		/* Update consumer index. */
 		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
