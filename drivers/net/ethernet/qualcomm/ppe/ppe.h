@@ -13,6 +13,8 @@ struct device;
 struct regmap;
 struct dentry;
 
+struct ppe_ports;
+
 /**
  * struct ppe_device - PPE device private data.
  * @dev: PPE device structure.
