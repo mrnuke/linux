@@ -229,11 +229,9 @@ static void qcom_ppe_remove(struct platform_device *pdev)
 	struct ppe_device *ppe_dev;
 
 	ppe_dev = platform_get_drvdata(pdev);
-	ppe_debugfs_teardown(ppe_dev);
 	ppe_port_mac_deinit(ppe_dev);
+	ppe_debugfs_teardown(ppe_dev);
 	edma_destroy(ppe_dev);
-
-	platform_set_drvdata(pdev, NULL);
 }
 
 static const struct of_device_id qcom_ppe_of_match[] = {

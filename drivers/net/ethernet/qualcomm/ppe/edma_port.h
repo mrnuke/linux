@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_PORTS__
@@ -17,7 +17,7 @@
 					| NETIF_F_TSO6)
 
 /**
- * struct edma_port_rx_stats - EDMA RX per CPU stats for the port.
+ * struct edma_port_rx_stats - EDMA Rx per CPU stats for the port.
  * @rx_pkts: Number of Rx packets
  * @rx_bytes: Number of Rx bytes
  * @rx_drops: Number of Rx drops
