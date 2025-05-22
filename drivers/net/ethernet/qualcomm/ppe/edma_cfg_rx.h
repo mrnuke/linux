@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __EDMA_CFG_RX__
@@ -28,6 +28,7 @@
 
 /* Rx AC flow control default threshold */
 #define EDMA_RX_AC_FC_THRES_DEF		0x104
+
 /* Rx mitigation timer's default value in microseconds */
 #define EDMA_RX_MITIGATION_TIMER_DEF	25
 
@@ -66,7 +67,7 @@ void edma_cfg_rx_rings_enable(void);
 void edma_cfg_rx_rings_disable(void);
 void edma_cfg_rx_buff_size_setup(void);
 int edma_cfg_rx_rps_hash_map(void);
-int edma_cfg_rx_rps(const struct ctl_table *table, int write,
+int edma_cfg_rx_rps(struct ctl_table *table, int write,
 		    void *buffer, size_t *lenp, loff_t *ppos);
 int edma_cfg_rx_rps_bitmap(const struct ctl_table *table, int write,
 			   void *buffer, size_t *lenp, loff_t *ppos);
