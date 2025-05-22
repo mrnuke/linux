@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0+
 
-#include <dt-bindings/net/qcom,qca808x.h>
 #include <linux/phy.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
+#include <dt-bindings/net/qcom,qca808x.h>
 
+#include "../phylib.h"
 #include "qcom.h"
 
 /* ADC threshold */
@@ -149,7 +150,6 @@
 #define QCA8084_WORK_MODE_CFG			0xc90f030
 #define QCA8084_WORK_MODE_MASK			GENMASK(5, 0)
 #define QCA8084_WORK_MODE_QXGMII		(BIT(5) | GENMASK(3, 0))
-#define QCA8084_WORK_MODE_QXGMII_PORT4_SGMII	(BIT(5) | GENMASK(2, 0))
 #define QCA8084_WORK_MODE_SWITCH		BIT(4)
 #define QCA8084_WORK_MODE_SWITCH_PORT4_SGMII	BIT(5)
 
@@ -165,6 +165,8 @@ enum {
 	TLMM_AHB_CLK,
 	CNOC_AHB_CLK,
 	MDIO_AHB_CLK,
+	MDIO_MASTER_AHB_CLK,
+	SWITCH_CORE_CLK,
 	PACKAGE_CLK_MAX
 };
 
@@ -185,6 +187,8 @@ static const char *const qca8084_package_clk_name[PACKAGE_CLK_MAX] = {
 	[TLMM_AHB_CLK] =	"tlmm_ahb",
 	[CNOC_AHB_CLK] =	"cnoc_ahb",
 	[MDIO_AHB_CLK] =	"mdio_ahb",
+	[MDIO_MASTER_AHB_CLK] =	"mdio_master_ahb",
+	[SWITCH_CORE_CLK] =	"switch_core",
 };
 
 static int __qca8084_set_page(struct mii_bus *bus, u16 sw_addr, u16 page)
@@ -326,9 +330,12 @@ static bool qca808x_is_1g_only(struct phy_device *phydev)
 {
 	int ret;
 
+	if (!phydev_id_compare(phydev, QCA8081_PHY_ID))
+		return false;
+
 	ret = phy_read_mmd(phydev, MDIO_MMD_AN, QCA808X_PHY_MMD7_CHIP_TYPE);
 	if (ret < 0)
-		return true;
+		return false;
 
 	return !!(QCA808X_PHY_CHIP_TYPE_1G & ret);
 }
@@ -832,6 +839,10 @@ static int qca8084_package_clock_init(struct qca808x_shared_priv *shared_priv)
 	if (ret)
 		return ret;
 
+	ret = clk_prepare_enable(shared_priv->clk[SWITCH_CORE_CLK]);
+	if (ret)
+		return ret;
+
 	/* Configure clock rate 104.17MHZ for the PHY package
 	 * AHB clock tree.
 	 */
@@ -859,16 +870,18 @@ static int qca8084_package_clock_init(struct qca808x_shared_priv *shared_priv)
 	if (ret)
 		return ret;
 
+	ret = clk_prepare_enable(shared_priv->clk[MDIO_MASTER_AHB_CLK]);
+	if (ret)
+		return ret;
+
 	return clk_prepare_enable(shared_priv->clk[MDIO_AHB_CLK]);
 }
 
 static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
 {
-	struct phy_package_shared *shared = phydev->shared;
-	struct qca808x_shared_priv *shared_priv;
+	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);
 	int ret, mode;
 
-	shared_priv = shared->priv;
 	switch (shared_priv->package_mode) {
 	case QCA808X_PCS1_10G_QXGMII_PCS0_UNUNSED:
 		mode = QCA8084_WORK_MODE_QXGMII;
@@ -997,9 +1010,9 @@ static void qca8084_link_change_notify(struct phy_device *phydev)
  */
 static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 {
+	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);
 	int addr[QCA8084_MDIO_DEVICE_NUM] = {0, 1, 2, 3, 4, 5, 6};
-	struct phy_package_shared *shared = phydev->shared;
-	struct qca808x_shared_priv *shared_priv;
+	struct device_node *np = phy_package_get_node(phydev);
 	struct reset_control *rstc;
 	int i, ret, clear, set;
 	struct clk *clk;
@@ -1007,8 +1020,7 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	/* Program the MDIO address of PHY and PCS optionally, the MDIO
 	 * address 0-6 is used for PHY and PCS MDIO devices by default.
 	 */
-	ret = of_property_read_u32_array(shared->np,
-					 "qcom,phy-addr-fixup",
+	ret = of_property_read_u32_array(np, "qcom,phy-addr-fixup",
 					 addr, ARRAY_SIZE(addr));
 	if (ret && ret != -EINVAL)
 		return ret;
@@ -1038,30 +1050,32 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	if (ret)
 		return ret;
 
-	shared_priv = shared->priv;
 	for (i = 0; i < ARRAY_SIZE(qca8084_package_clk_name); i++) {
-		clk = of_clk_get_by_name(shared->np,
-					 qca8084_package_clk_name[i]);
-		if (IS_ERR(clk))
-			return dev_err_probe(&phydev->mdio.dev, PTR_ERR(clk),
-					     "package clock %s not ready\n",
-					     qca8084_package_clk_name[i]);
+		clk = of_clk_get_by_name(np, qca8084_package_clk_name[i]);
+		if (IS_ERR(clk)) {
+			if (PTR_ERR(clk) == -EINVAL)
+				clk = NULL;
+			else
+				return dev_err_probe(&phydev->mdio.dev, PTR_ERR(clk),
+						     "package clock %s not ready\n",
+						     qca8084_package_clk_name[i]);
+		}
 		shared_priv->clk[i] = clk;
 	}
-
-	rstc = of_reset_control_get_exclusive(shared->np, NULL);
-	if (IS_ERR(rstc))
-		return dev_err_probe(&phydev->mdio.dev, PTR_ERR(rstc),
-				     "package reset not ready\n");
 
 	/* The package mode 10G-QXGMII of PCS1 is used for Quad PHY and
 	 * PCS0 is unused by default.
 	 */
 	shared_priv->package_mode = QCA808X_PCS1_10G_QXGMII_PCS0_UNUNSED;
-	ret = of_property_read_u32(shared->np, "qcom,package-mode",
+	ret = of_property_read_u32(np, "qcom,package-mode",
 				   &shared_priv->package_mode);
 	if (ret && ret != -EINVAL)
 		return ret;
+
+	rstc = of_reset_control_get_exclusive(np, NULL);
+	if (IS_ERR(rstc))
+		return dev_err_probe(&phydev->mdio.dev, PTR_ERR(rstc),
+				     "package reset not ready\n");
 
 	/* Deassert PHY package. */
 	return reset_control_deassert(rstc);
