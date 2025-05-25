@@ -540,6 +540,9 @@ static int ipq_pcs_link_up_config_usxgmii(struct ipq_pcs *qpcs, int speed)
 static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 			    const struct phylink_link_state *state)
 {
+	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
+	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
+
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
@@ -551,6 +554,9 @@ static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 		phylink_clear(supported, 10baseT_Half);
 		return 0;
 	default:
+		WARN_ON(1);
+		dev_err(qpcs->dev, "interface %s not supported\n",
+			phy_modes(state->interface));
 		return -EINVAL;
 	}
 }
