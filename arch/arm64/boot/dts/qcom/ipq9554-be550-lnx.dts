@@ -96,6 +96,7 @@
 		#size-cells = <0>;
 		compatible = "qcom,qca8084-package";
 		reg = <0>;
+
 		clocks = <&qca8k_nsscc NSS_CC_APB_BRIDGE_CLK>,
 			 <&qca8k_nsscc NSS_CC_AHB_CLK>,
 			 <&qca8k_nsscc NSS_CC_SEC_CTRL_AHB_CLK>,
@@ -510,7 +511,7 @@
 	pinctrl-0 = <&pcie2_pins>;
 	pinctrl-names = "default";
 	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
-	status = "okay";
+	status = "disabled";
 };
 
 &blsp1_i2c3 {

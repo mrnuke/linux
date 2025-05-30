@@ -912,6 +912,45 @@ static int qca8084_package_clock_init(struct qca808x_shared_priv *shared_priv)
 	return clk_prepare_enable(shared_priv->clk[MDIO_AHB_CLK]);
 }
 
+static int qca8084_reprobe_pcs(struct phy_device *phydev)
+{
+	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);
+	struct device_node *np = phy_package_get_node(phydev);
+	struct device_node *child;
+
+	if (shared_priv->mdiodev[0] && shared_priv->mdiodev[1])
+		return 0;
+
+	for_each_available_child_of_node(np, child) {
+		struct mdio_device *mdiodev;
+
+		if (of_node_name_eq(child, "pcs-phy")) {
+			mdiodev = qca8084_package_pcs_probe(child);
+			if (WARN_ON_ONCE(IS_ERR(mdiodev))) {
+				phydev_err(phydev, "pcs fucked %ld\n", PTR_ERR(mdiodev));
+				return dev_err_probe(&phydev->mdio.dev, PTR_ERR(mdiodev),
+						     "pcs-phy fucked\n");
+			}
+
+			shared_priv->mdiodev[0] = mdiodev;
+		}
+
+		if (of_node_name_eq(child, "xpcs-phy")) {
+			mdiodev = qca8084_package_xpcs_probe(child);
+			if (IS_ERR(mdiodev)) {
+				phydev_err(phydev, "xpcs fucked %ld\n", PTR_ERR(mdiodev));
+				return dev_err_probe(&phydev->mdio.dev, PTR_ERR(mdiodev),
+						     "xpcs-phy fucked\n");
+			}
+
+			shared_priv->mdiodev[1] = mdiodev;
+		}
+	}
+
+	phydev_err(phydev, "All good!\n");
+	return 0;
+}
+
 static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
 {
 	struct qca808x_shared_priv *shared_priv;
@@ -934,6 +973,8 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
 		return -EINVAL;
 	}
 
+	qca8084_reprobe_pcs(phydev);
+
 	ret = qca8084_mii_modify(phydev, QCA8084_WORK_MODE_CFG,
 				 QCA8084_WORK_MODE_MASK,
 				 FIELD_PREP(QCA8084_WORK_MODE_MASK, mode));
@@ -947,6 +988,9 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
 		return ret;
 
 	usleep_range(10000, 11000);
+
+	if (!shared_priv->mdiodev[1] || !shared_priv->mdiodev[0])
+		return ret;
 
 	/* Configure PCS working on 10G-QXGMII mode */
 	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
@@ -1043,6 +1087,9 @@ static void qca8084_link_change_notify(struct phy_device *phydev)
 			       phydev->speed == SPEED_1000 ?
 			       QCA8084_IPG_10_TO_11_EN : 0);
 
+		if (!shared_priv->mdiodev[1] || !shared_priv->mdiodev[0])
+			return;
+
 		qca8084_qxgmii_set_speed(shared_priv->mdiodev[1],
 					 shared_priv->mdiodev[0],
 					 priv->channel_id,
@@ -1065,7 +1112,6 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	int addr[QCA8084_MDIO_DEVICE_NUM] = {0, 1, 2, 3, 4, 5, 6};
 	struct device_node *np = phy_package_get_node(phydev);
 	struct qca808x_shared_priv *shared_priv;
-	struct device_node *child;
 	int i, ret, clear, set;
 	struct clk *clk;
 
@@ -1126,25 +1172,7 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	if (ret && ret != -EINVAL)
 		return ret;
 
-	for_each_available_child_of_node(np, child) {
-		struct mdio_device *mdiodev;
-
-		if (of_node_name_eq(child, "pcs-phy")) {
-			mdiodev = qca8084_package_pcs_probe(child);
-			if (IS_ERR(mdiodev))
-				return PTR_ERR(mdiodev);
-
-			shared_priv->mdiodev[0] = mdiodev;
-		}
-
-		if (of_node_name_eq(child, "xpcs-phy")) {
-			mdiodev = qca8084_package_xpcs_probe(child);
-			if (IS_ERR(mdiodev))
-				return PTR_ERR(mdiodev);
-
-			shared_priv->mdiodev[1] = mdiodev;
-		}
-	}
+	qca8084_reprobe_pcs(phydev);
 
 	shared_priv->rstc = of_reset_control_get_exclusive(np, NULL);
 	if (IS_ERR(shared_priv->rstc))
