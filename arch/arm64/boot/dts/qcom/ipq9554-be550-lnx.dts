@@ -62,20 +62,23 @@
 		#size-cells = <0>;
 		compatible = "qcom,qca8084-package";
 		reg = <0>;
+
 		clocks = <&qca8k_nsscc NSS_CC_APB_BRIDGE_CLK>,
 			 <&qca8k_nsscc NSS_CC_AHB_CLK>,
 			 <&qca8k_nsscc NSS_CC_SEC_CTRL_AHB_CLK>,
 			 <&qca8k_nsscc NSS_CC_TLMM_CLK>,
 			 <&qca8k_nsscc NSS_CC_TLMM_AHB_CLK>,
 			 <&qca8k_nsscc NSS_CC_CNOC_AHB_CLK>,
-			 <&qca8k_nsscc NSS_CC_MDIO_AHB_CLK>;
+			 <&qca8k_nsscc NSS_CC_MDIO_AHB_CLK>,
+			 <&qca8k_nsscc NSS_CC_MDIO_MASTER_AHB_CLK>;
 		clock-names = "apb_bridge",
 			      "ahb",
 			      "sec_ctrl_ahb",
 			      "tlmm",
 			      "tlmm_ahb",
 			      "cnoc_ahb",
-			      "mdio_ahb";
+			      "mdio_ahb",
+			      "mdio_master_ahb";
 		resets = <&qca8k_nsscc NSS_CC_GEPHY_FULL_ARES>;
 
 		/* TODO: UPdate driver to use string:
@@ -465,7 +468,7 @@
 	pinctrl-0 = <&pcie2_pins>;
 	pinctrl-names = "default";
 	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
-	status = "okay";
+	status = "disabled";
 };
 
 &blsp1_uart2 {
