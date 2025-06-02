@@ -31,8 +31,10 @@
 #define PCS_MODE_PSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x2)
 #define PCS_MODE_SGMII_PLUS		FIELD_PREP(PCS_MODE_SEL_MASK, 0x8)
 #define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
-#define PCS_MODE_SGMII_CTRL_MASK	GENMASK(6, 4)
-#define PCS_MODE_SGMII_CTRL_1000BASEX	FIELD_PREP(PCS_MODE_SGMII_CTRL_MASK, \
+#define PCS_MODE_SGMII_MODE_MASK	GENMASK(6, 4)
+#define PCS_MODE_SGMII_MODE_MAC		FIELD_PREP(PCS_MODE_SGMII_MODE_MASK, \
+						   0x2)
+#define PCS_MODE_SGMII_MODE_1000BASEX	FIELD_PREP(PCS_MODE_SGMII_MODE_MASK, \
 						   0x0)
 
 #define PCS_MII_CTRL(x)			(0x480 + 0x18 * (x))
@@ -311,30 +313,34 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 			       phy_interface_t interface)
 {
 	unsigned long rate = 125000000;
-	unsigned int val, mask = PCS_MODE_SEL_MASK;
+	unsigned int val, mask;
 	int ret;
 
 	/* Assert XPCS reset */
 	reset_control_assert(qpcs->reset[XPCS_RESET]);
 
 	/* Configure PCS interface mode */
+	mask = PCS_MODE_SEL_MASK;
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
-		val = PCS_MODE_SGMII;
+		mask |= PCS_MODE_SGMII_MODE_MASK;
+		val = PCS_MODE_SGMII | PCS_MODE_SGMII_MODE_MAC;
 		break;
 	case PHY_INTERFACE_MODE_QSGMII:
-		val = PCS_MODE_QSGMII;
-		break;
-	case PHY_INTERFACE_MODE_1000BASEX:
-		mask |= PCS_MODE_SGMII_CTRL_MASK;
-		val = PCS_MODE_SGMII | PCS_MODE_SGMII_CTRL_1000BASEX;
+		mask |= PCS_MODE_SGMII_MODE_MASK;
+		val = PCS_MODE_QSGMII | PCS_MODE_SGMII_MODE_MAC;
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		val = PCS_MODE_SGMII_PLUS;
 		rate = 312500000;
 		break;
 	case PHY_INTERFACE_MODE_PSGMII:
-		val = PCS_MODE_PSGMII;
+		mask |= PCS_MODE_SGMII_MODE_MASK;
+		val = PCS_MODE_PSGMII | PCS_MODE_SGMII_MODE_MAC;
+		break;
+	case PHY_INTERFACE_MODE_1000BASEX:
+		mask |= PCS_MODE_SGMII_MODE_MASK;
+		val = PCS_MODE_SGMII | PCS_MODE_SGMII_MODE_1000BASEX;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
 	case PHY_INTERFACE_MODE_10GBASER:
@@ -355,8 +361,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		return -EOPNOTSUPP;
 	}
 
-	ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL,
-				 mask, val);
+	ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL, mask, val);
 	if (ret)
 		return ret;
 
@@ -578,7 +583,6 @@ ipq_unipcs_link_up_clock_rate_set(struct ipq_pcs_mii *qunipcs_ch,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_PSGMII:
-	case PHY_INTERFACE_MODE_1000BASEX:
 		rate = ipq_unipcs_clock_rate_get_gmii(speed);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
