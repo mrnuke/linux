@@ -336,7 +336,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	if (ret)
 		return ret;
 
-	fsleep(1000);
+	fsleep(20000);
 	ret = regmap_set_bits(qpcs->regmap, PCS_PLL_RESET, PCS_ANA_SW_RESET);
 	if (ret)
 		return ret;
