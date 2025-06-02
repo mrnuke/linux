@@ -22,6 +22,11 @@
 #define PCS_CALIBRATION			0x1e0
 #define PCS_CALIBRATION_DONE		BIT(7)
 
+#define PCS_MISC2			0x218
+#define PCS_MISC2_MODE_MASK		GENMASK(6, 5)
+#define PCS_MISC2_MODE_SGMII		FIELD_PREP(PCS_MISC2_MODE_MASK, 0x1)
+#define PCS_MISC2_MODE_SGMII_PLUS	FIELD_PREP(PCS_MISC2_MODE_MASK, 0x2)
+
 #define PCS_MODE_CTRL			0x46c
 #define PCS_MODE_SEL_MASK		GENMASK(12, 8)
 #define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
@@ -275,7 +280,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 			       phy_interface_t interface)
 {
 	unsigned long rate = 125000000;
-	unsigned int val, mask;
+	unsigned int val, mask, misc2 = 0;
 	int ret;
 
 	/* Configure PCS interface mode */
@@ -283,6 +288,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	switch (interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 		val = PCS_MODE_SGMII;
+		misc2 = PCS_MISC2_MODE_SGMII;
 		break;
 	case PHY_INTERFACE_MODE_QSGMII:
 		val = PCS_MODE_QSGMII;
@@ -290,9 +296,11 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	case PHY_INTERFACE_MODE_1000BASEX:
 		mask |= PCS_MODE_SGMII_MODE_MASK;
 		val = PCS_MODE_SGMII | PCS_MODE_SGMII_MODE_1000BASEX;
+		misc2 = PCS_MISC2_MODE_SGMII;
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 		val = PCS_MODE_2500BASEX;
+		misc2 = PCS_MISC2_MODE_SGMII_PLUS;
 		rate = 312500000;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
@@ -312,6 +320,13 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	if (interface == PHY_INTERFACE_MODE_10G_QXGMII) {
 		ret = regmap_set_bits(qpcs->regmap, PCS_QP_USXG_OPTION,
 				      PCS_QP_USXG_GMII_SRC_XPCS);
+		if (ret)
+			return ret;
+	}
+
+	if (misc2) {
+		ret = regmap_update_bits(qpcs->regmap, PCS_MISC2,
+					 PCS_MISC2_MODE_MASK, misc2);
 		if (ret)
 			return ret;
 	}
