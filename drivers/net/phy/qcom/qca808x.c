@@ -181,6 +181,7 @@ struct qca808x_shared_priv {
 	int package_mode;
 	struct clk *clk[PACKAGE_CLK_MAX];
 	struct mdio_device *mdiodev[2];	/* PCS and XPCS mdio device */
+	struct reset_control *rstc;
 };
 
 static const char *const qca8084_package_clk_name[PACKAGE_CLK_MAX] = {
@@ -1064,7 +1065,6 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 	int addr[QCA8084_MDIO_DEVICE_NUM] = {0, 1, 2, 3, 4, 5, 6};
 	struct device_node *np = phy_package_get_node(phydev);
 	struct qca808x_shared_priv *shared_priv;
-	struct reset_control *rstc;
 	struct device_node *child;
 	int i, ret, clear, set;
 	struct clk *clk;
@@ -1146,13 +1146,13 @@ static int qca8084_phy_package_probe_once(struct phy_device *phydev)
 		}
 	}
 
-	rstc = of_reset_control_get_exclusive(np, NULL);
-	if (IS_ERR(rstc))
-		return dev_err_probe(&phydev->mdio.dev, PTR_ERR(rstc),
+	shared_priv->rstc = of_reset_control_get_exclusive(np, NULL);
+	if (IS_ERR(shared_priv->rstc))
+		return dev_err_probe(&phydev->mdio.dev, PTR_ERR(shared_priv->rstc),
 				     "package reset not ready\n");
 
 	/* Deassert PHY package. */
-	return reset_control_deassert(rstc);
+	return reset_control_deassert(shared_priv->rstc);
 }
 
 static void qca8084_phy_package_remove_once(struct phy_device *phydev)
@@ -1161,6 +1161,11 @@ static void qca8084_phy_package_remove_once(struct phy_device *phydev)
 
 	qca8084_package_xpcs_and_pcs_remove(shared_priv->mdiodev[1],
 					    shared_priv->mdiodev[0]);
+
+	if (shared_priv->rstc) {
+		reset_control_put(shared_priv->rstc);
+		shared_priv->rstc = NULL;
+	};
 }
 
 static int qca8084_probe(struct phy_device *phydev)
@@ -1196,7 +1201,7 @@ static int qca8084_probe(struct phy_device *phydev)
 	/* De-assert PHY reset after the clock of PHY enabled. */
 	rstc = devm_reset_control_get_exclusive(dev, NULL);
 	if (IS_ERR(rstc))
-		return dev_err_probe(dev, PTR_ERR(rstc),
+		return dev_err_probe(dev, PTR_ERR(shared_priv->rstc),
 				     "Get PHY reset failed\n");
 
 	return reset_control_deassert(rstc);
