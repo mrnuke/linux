@@ -605,13 +605,19 @@ static int qca8084_xpcs_clock_parent_set(struct mdio_device *xpcs_mdiodev,
 		xpcs_ch = xpcs_data->xpcs_ch[channel];
 		ret = clk_set_parent(xpcs_ch.clks[XPCS_RX_SRC_CLK],
 				     pcs_data->clks[PCS_RX_ROOT_CLK]);
-		if (ret)
+		if (ret) {
+			dev_err(&pcs_mdiodev->dev, "xpcs ch%d rx clock facket!\n",
+				channel);
 			return ret;
+		};
 
 		ret = clk_set_parent(xpcs_ch.clks[XPCS_TX_SRC_CLK],
 				     pcs_data->clks[PCS_TX_ROOT_CLK]);
-		if (ret)
+		if (ret) {
+			dev_err(&pcs_mdiodev->dev, "xpcs ch%d tx clock facket!\n",
+				channel);
 			return ret;
+		};
 	}
 
 	return 0;
@@ -779,4 +785,6 @@ void qca8084_qxgmii_set_speed(struct mdio_device *xpcs_mdiodev,
 		mdiodev_c45_modify(xpcs_mdiodev, mmd, DIG_CTRL1,
 				   FIFO_RESET_CH1_CH2_CH3,
 				   FIFO_RESET_CH1_CH2_CH3);
+
+	dev_err(&xpcs_mdiodev->dev, "All your PHY clock rate %ld\n", rate);
 }
