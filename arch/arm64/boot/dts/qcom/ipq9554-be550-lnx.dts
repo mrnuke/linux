@@ -7,6 +7,7 @@
 #include <dt-bindings/clock/qcom,qca8k-nsscc.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/net/qcom,ipq9574-pcs.h>
 #include <dt-bindings/net/qcom,qca808x.h>
 #include <dt-bindings/reset/qcom,qca8k-nsscc.h>
 
@@ -53,18 +54,6 @@
 			linux,code = <KEY_LIGHTS_TOGGLE>;
 		};
 	};
-
-	fixed_uniphy_rx312p5m: fixed-uniphy-rx312p5m {
-		compatible = "fixed-clock";
-		clock-frequency = <312500000>;
-		#clock-cells = <0>;
-	};
-
-	fixed_uniphy_tx312p5m: fixed-uniphy-tx312p5m {
-		compatible = "fixed-clock";
-		clock-frequency = <312500000>;
-		#clock-cells = <0>;
-	};
 };
 
 &mdio {
@@ -83,8 +72,8 @@
 			 <0>,
 			 <0>,
 			 <0>,
-			 <&fixed_uniphy_rx312p5m>,
-			 <&fixed_uniphy_tx312p5m>;
+			 <&pcs0 PCS_TX_CLK>,
+			 <&pcs0 PCS_RX_CLK>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
 		#power-domain-cells = <1>;
@@ -151,8 +140,8 @@
 			compatible = "qcom,qca8k-pcs-phy";
 			reg = <6>;
 			clocks = <&qca8k_nsscc NSS_CC_SRDS1_SYS_CLK>,
-				 <&fixed_uniphy_tx312p5m>,
-				 <&fixed_uniphy_rx312p5m>;
+				 <&pcs0 PCS_RX_CLK>,
+				 <&pcs0 PCS_TX_CLK>;
 			clock-names = "pcs",
 				      "pcs_rx_root",
 				      "pcs_tx_root";
