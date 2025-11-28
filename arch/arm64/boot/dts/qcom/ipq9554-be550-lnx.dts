@@ -84,6 +84,7 @@
 		#size-cells = <0>;
 		compatible = "qcom,qca8084-package";
 		reg = <0>;
+
 		clocks = <&qca8k_nsscc NSS_CC_APB_BRIDGE_CLK>,
 			 <&qca8k_nsscc NSS_CC_AHB_CLK>,
 			 <&qca8k_nsscc NSS_CC_SEC_CTRL_AHB_CLK>,
@@ -299,11 +300,52 @@
 		bias-pull-up;
 	};
 
+	i2c5_pins: i2c5-pins {
+		pins = "gpio48", "gpio49";
+		function = "blsp5_i2c";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
 	i2c3_pins: i2c3-pins {
 		pins = "gpio15", "gpio16";
 		function = "blsp3_i2c";
 		drive-strength = <8>;
 		bias-disable;
+	};
+
+	pcie0_pins: pcie0-pins {
+		clkreq-n-pin {
+			pins = "gpio22";
+			function = "pcie0_clk";
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+
+		perst-n-pin {
+			pins = "gpio23";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-disable;
+			output-low;
+		};
+	};
+
+	pcie1_pins: pcie1-pins {
+		clkreq-n-pin {
+			pins = "gpio25";
+			function = "pcie1_clk";
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+
+		perst-n-pin {
+			pins = "gpio26";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-disable;
+			output-low;
+		};
 	};
 
 	pcie2_pins: pcie2-pins {
@@ -352,6 +394,20 @@
 		drive-strength = <2>;
 		bias-disable;
 	};
+
+	spi_0_pins: spi-0-pins {
+		pins = "gpio11", "gpio12", "gpio13", "gpio14";
+		function = "blsp0_spi";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+&blsp1_spi0 {
+	pinctrl-0 = <&spi_0_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+	cs-select = <0>;
 };
 
 &qpic_bam {
@@ -379,6 +435,9 @@
 };
 
 &rpm_requests {
+	// pinctrl-0 = <&i2c5_pins>;
+	// pinctrl-names = "default";
+
 	regulators {
 		compatible = "qcom,rpm-mp5496-regulators";
 
@@ -504,7 +563,29 @@
 	};
 };
 
+&pcie0_phy {
+	status = "okay";
+};
+
+&pcie1_phy {
+	status = "okay";
+};
+
 &pcie2_phy {
+	status = "okay";
+};
+
+&pcie0 {
+	pinctrl-0 = <&pcie0_pins>;
+	pinctrl-names = "default";
+	perst-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&pcie1 {
+	pinctrl-0 = <&pcie1_pins>;
+	pinctrl-names = "default";
+	perst-gpios = <&tlmm 26 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
@@ -512,7 +593,20 @@
 	pinctrl-0 = <&pcie2_pins>;
 	pinctrl-names = "default";
 	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
+
+	pcie@0,0 { /* PCIe bridge/root */
+		#address-cells = <3>;
+		#size-cells    = <2>;
+		reg = <0 0 0 0 0>;
+
+		wifi2: pcie@0 {
+			compatible = "pci17cb,1108";
+			reg = <0 0 0 0 0>;
+			qcom,board_id = <0x04>;
+		};
+	};
 };
 
 &blsp1_i2c3 {
@@ -563,4 +657,8 @@
 &xo_board_clk {
 	clock-div = <2>;
 	clock-mult = <1>;
+};
+
+&wifi {
+	status = "okay";
 };
