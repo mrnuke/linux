@@ -93,6 +93,8 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.coldboot_cal_ftm = true,
 
 		.fw_mem_mode = 0,
+		.num_vdevs = 16 + 1,
+		.num_peers = 512,
 		.supports_suspend = false,
 		.hal_desc_sz = sizeof(struct hal_rx_desc_ipq8074),
 
@@ -116,7 +118,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fixed_fw_mem = false,
 		.support_off_channel_tx = false,
 
-		.num_vdevs_peers = ath11k_vdevs_peers,
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ8074,
