@@ -329,6 +329,7 @@ static int q6v7_wcss_reset(struct q6v5_wcss *wcss, struct rproc *rproc)
 static int q6v5_wcss_start(struct rproc *rproc)
 {
 	struct q6v5_wcss *wcss = rproc->priv;
+	uint32_t val;
 	int ret;
 
 	qcom_q6v5_prepare(&wcss->q6v5);
@@ -379,6 +380,10 @@ static int q6v5_wcss_start(struct rproc *rproc)
 	ret = qcom_q6v5_wait_for_start(&wcss->q6v5, 5 * HZ);
 	if (ret == -ETIMEDOUT)
 		dev_err(wcss->dev, "start timed out\n");
+
+	/* Read the version registers to make sure WCSS is out of reset */
+	val = readl(wcss->reg_base);
+	dev_info(wcss->dev, "QDSP6SS Version : 0x%x\n", val);
 
 	return ret;
 
