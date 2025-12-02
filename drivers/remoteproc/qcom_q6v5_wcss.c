@@ -117,6 +117,7 @@ struct q6v5_wcss {
 
 	void __iomem *reg_base;
 	void __iomem *rmb_base;
+	void __iomem *wcmn_base;
 
 	struct regmap *halt_map;
 	u32 halt_q6;
@@ -332,6 +333,7 @@ static int q6v7_wcss_reset(struct q6v5_wcss *wcss, struct rproc *rproc)
 static int q6v5_wcss_start(struct rproc *rproc)
 {
 	struct q6v5_wcss *wcss = rproc->priv;
+	uint32_t val;
 	int ret;
 
 	qcom_q6v5_prepare(&wcss->q6v5);
@@ -382,6 +384,16 @@ static int q6v5_wcss_start(struct rproc *rproc)
 	ret = qcom_q6v5_wait_for_start(&wcss->q6v5, 5 * HZ);
 	if (ret == -ETIMEDOUT)
 		dev_err(wcss->dev, "start timed out\n");
+
+	if (wcss->wcmn_base) {
+		/* Read the version registers to make sure WCSS is out of reset
+		 */
+		val = readl(wcss->reg_base);
+		dev_info(wcss->dev, "QDSP6SS Version : 0x%x\n", val);
+
+		val = readl(wcss->wcmn_base);
+		dev_info(wcss->dev, "WCSS Version : 0x%x\n", val);
+	}
 
 	return ret;
 
@@ -1001,6 +1013,15 @@ static int q6v5_wcss_init_mmio(struct q6v5_wcss *wcss,
 		wcss->rmb_base = devm_platform_ioremap_resource_byname(pdev, "rmb");
 		if (IS_ERR(wcss->rmb_base))
 			return PTR_ERR(wcss->rmb_base);
+
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "wcmn");
+		if (res) {
+			wcss->wcmn_base = ioremap(res->start, resource_size(res));
+			if (IS_ERR(wcss->wcmn_base)) {
+				dev_err(&pdev->dev, "wcmn ioremap failed\n");
+				return -ENOMEM;
+			}
+		}
 	}
 
 	syscon = of_parse_phandle(pdev->dev.of_node,
