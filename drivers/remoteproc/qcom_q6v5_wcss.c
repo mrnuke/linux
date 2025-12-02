@@ -6,6 +6,7 @@
  */
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
@@ -94,6 +95,8 @@
 #define TCSR_WCSS_CLK_ENABLE	0x14
 
 #define MAX_HALT_REG		4
+#define WCNSS_PAS_ID                6
+
 enum {
 	WCSS_IPQ8074,
 	WCSS_IPQ9574,
@@ -159,6 +162,7 @@ struct q6v5_wcss {
 	unsigned int crash_reason_smem;
 	u32 version;
 	bool requires_force_stop;
+	bool force_fw_loading_via_scm;
 
 	struct qcom_rproc_glink glink_subdev;
 	struct qcom_rproc_pdm pdm_subdev;
@@ -338,6 +342,16 @@ static int q6v5_wcss_start(struct rproc *rproc)
 
 	qcom_q6v5_prepare(&wcss->q6v5);
 
+
+	if (wcss->force_fw_loading_via_scm) {
+		ret = qcom_scm_pas_auth_and_reset(WCNSS_PAS_ID);
+		if (ret) {
+			dev_err(wcss->dev, "WCNSS_PAS_ID failed\n");
+			return ret;
+		}
+		goto wait_for_reset;
+	}
+
 	/* Release Q6 and WCSS reset */
 	ret = reset_control_deassert(wcss->wcss_reset);
 	if (ret) {
@@ -381,6 +395,7 @@ static int q6v5_wcss_start(struct rproc *rproc)
 	if (ret)
 		goto wcss_q6_reset;
 
+wait_for_reset:
 	ret = qcom_q6v5_wait_for_start(&wcss->q6v5, 5 * HZ);
 	if (ret == -ETIMEDOUT)
 		dev_err(wcss->dev, "start timed out\n");
@@ -934,6 +949,12 @@ static int q6v5_wcss_load(struct rproc *rproc, const struct firmware *fw)
 	struct q6v5_wcss *wcss = rproc->priv;
 	int ret;
 
+	if (wcss->force_fw_loading_via_scm)
+		return qcom_mdt_load(wcss->dev, fw, rproc->firmware,
+				     WCNSS_PAS_ID, wcss->mem_region,
+				     wcss->mem_phys, wcss->mem_size,
+				     &wcss->mem_reloc);
+
 	ret = qcom_mdt_load_no_init(wcss->dev, fw, rproc->firmware,
 				    wcss->mem_region, wcss->mem_phys,
 				    wcss->mem_size, &wcss->mem_reloc);
@@ -1022,6 +1043,14 @@ static int q6v5_wcss_init_mmio(struct q6v5_wcss *wcss,
 				return -ENOMEM;
 			}
 		}
+
+		wcss->force_fw_loading_via_scm = of_property_read_bool(
+			pdev->dev.of_node, "qcom,firmware-scam");
+	}
+
+	if (wcss->force_fw_loading_via_scm) {
+		if (!qcom_scm_pas_supported(WCNSS_PAS_ID))
+			return -EPROBE_DEFER;
 	}
 
 	syscon = of_parse_phandle(pdev->dev.of_node,
