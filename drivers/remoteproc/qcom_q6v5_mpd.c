@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
@@ -377,11 +378,9 @@ static int q6_wcss_load(struct rproc *rproc, const struct firmware *fw)
 			continue;
 
 		ret = qcom_mdt_load_no_init(wcss->dev, fw_hdl,
-					    wcss->firmware[loop], 0,
-					    wcss->mem_region,
-					    wcss->mem_phys,
-					    wcss->mem_size,
-					    &wcss->mem_reloc);
+					    wcss->firmware[loop],
+					    wcss->mem_region, wcss->mem_phys,
+					    wcss->mem_size, &wcss->mem_reloc);
 
 		release_firmware(fw_hdl);
 
@@ -759,7 +758,7 @@ free_rproc:
 	return ret;
 }
 
-static int q6_wcss_remove(struct platform_device *pdev)
+static void q6_wcss_remove(struct platform_device *pdev)
 {
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct q6_wcss *wcss = rproc->priv;
@@ -768,8 +767,6 @@ static int q6_wcss_remove(struct platform_device *pdev)
 
 	rproc_del(rproc);
 	rproc_free(rproc);
-
-	return 0;
 }
 
 static const struct wcss_data q6_ipq5332_res_init = {
