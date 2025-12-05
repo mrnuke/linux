@@ -1355,7 +1355,7 @@ static const struct wcss_data wcss_ipq8074_res_init = {
 
 static const struct wcss_data wcss_ipq9574_res_init = {
 	.q6_firmware_name = "IPQ9574/q6_fw.mdt",
-	.m3_firmware_name = "IPQ8074/m3_fw.mdt",
+	.m3_firmware_name = "IPQ9574/m3_fw.mdt",
 	.version = WCSS_IPQ9574,
 	.crash_reason_smem = WCSS_CRASH_REASON,
 	.aon_reset_required = true,
