@@ -12,7 +12,6 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
@@ -372,6 +371,9 @@ static int q6_wcss_load(struct rproc *rproc, const struct firmware *fw)
 		if (!wcss->firmware[loop])
 			continue;
 
+		dev_info(wcss->dev, "loading additional firmware image %s\n",
+			 wcss->firmware[loop]);
+
 		ret = request_firmware(&fw_hdl, wcss->firmware[loop],
 				       wcss->dev);
 		if (ret)
@@ -460,19 +462,15 @@ static const struct rproc_ops q6_wcss_ops = {
 
 static int q6_alloc_memory_region(struct q6_wcss *wcss)
 {
-	struct reserved_mem *rmem = NULL;
-	struct device_node *node;
 	struct device *dev = wcss->dev;
+	struct resource res;
+	int ret;
 
 	if (wcss->version == Q6_IPQ) {
-		node = of_parse_phandle(dev->of_node, "memory-region", 0);
-		if (node)
-			rmem = of_reserved_mem_lookup(node);
-
-		of_node_put(node);
-
-		if (!rmem) {
-			dev_err(dev, "unable to acquire memory-region\n");
+		ret = of_reserved_mem_region_to_resource(dev->of_node, 0, &res);
+		if (ret) {
+			dev_err(dev, "unable to acquire memory-region: %pe\n",
+				ERR_PTR(ret));
 			return -EINVAL;
 		}
 	} else {
@@ -486,13 +484,12 @@ static int q6_alloc_memory_region(struct q6_wcss *wcss)
 		return 0;
 	}
 
-	wcss->mem_phys = rmem->base;
-	wcss->mem_reloc = rmem->base;
-	wcss->mem_size = rmem->size;
+	wcss->mem_phys = res.start;
+	wcss->mem_reloc = res.start;
+	wcss->mem_size = resource_size(&res);
 	wcss->mem_region = devm_ioremap_wc(dev, wcss->mem_phys, wcss->mem_size);
 	if (!wcss->mem_region) {
-		dev_err(dev, "unable to map memory region: %pa+%pa\n",
-			&rmem->base, &rmem->size);
+		dev_err(dev, "unable to map memory region: %pr\n", &res);
 		return -EBUSY;
 	}
 
