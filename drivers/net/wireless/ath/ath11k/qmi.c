@@ -3348,6 +3348,8 @@ int ath11k_qmi_init_service(struct ath11k_base *ab)
 		return ret;
 	}
 
+	ath11k_info(ab, "WCSS Version: 0x%x\n", ath11k_hif_read32(ab, 0xb50000));
+
 	return ret;
 }
 
