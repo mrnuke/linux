@@ -37,7 +37,12 @@ static u8 ath11k_hw_ipq6018_mac_from_pdev_id(int pdev_idx)
 static u8 ath11k_hw_ipq9574_mac_from_pdev_id(int pdev_idx)
 {
 	/* ipq9574 is a single PHY radio which maps to PHY B(mac3) */
-	return 2;
+	switch (pdev_idx) {
+	case 0:
+		return 2;
+	default:
+		return ATH11K_INVALID_HW_MAC_ID;
+	}
 }
 
 static void ath11k_hw_ipq8074_tx_mesh_enable(struct ath11k_base *ab,
