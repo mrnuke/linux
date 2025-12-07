@@ -71,9 +71,6 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 
 		.spectral = {
 			.fft_sz = 2,
-
-
-
 			.fft_pad_sz = 2,
 			.summary_pad_sz = 0,
 			.fft_hdr_len = 16,
@@ -97,18 +94,18 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.num_peers = 512,
 		.supports_suspend = false,
 		.hal_desc_sz = sizeof(struct hal_rx_desc_ipq8074),
-
+		.supports_regdb = false,
 		.fix_l1ss = true,
 		.credit_flow = false,
 		.max_tx_ring = DP_TCL_NUM_RING_MAX + 1,
 		.hal_params = &ath11k_hw_hal_params_ipq8074,
-
+		.supports_dynamic_smps_6ghz = false,
 		.alloc_cacheable_memory = true,
-
-
-
+		.supports_rssi_stats = false,
+		.fw_wmi_diag_event = false,
+		.current_cc_support = false,
 		.dbr_debug_support = true,
-
+		.global_reset = false,
 		.bios_sar_capa = NULL,
 		.m3_fw_support = false,
 		.fixed_bdf_addr = true,
@@ -117,7 +114,15 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.hybrid_bus_type = false,
 		.fixed_fw_mem = false,
 		.support_off_channel_tx = false,
+		.supports_multi_bssid = false,
 
+		.sram_dump = {},
+
+		.tcl_ring_retry = true,
+		.tx_ring_size = DP_TCL_DATA_RING_SIZE,
+		.smp2p_wow_exit = false,
+		.support_dual_stations = false,
+		.pdev_suspend = false,
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ8074,
