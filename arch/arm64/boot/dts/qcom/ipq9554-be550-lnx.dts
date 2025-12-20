@@ -565,3 +565,7 @@
 	clock-div = <2>;
 	clock-mult = <1>;
 };
+
+&wifi {
+	status = "okay";
+};
